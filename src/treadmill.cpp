@@ -65,7 +65,9 @@ CommandResult SimulationDriver::reset_emergency() {
 }
 
 DriverSample SimulationDriver::sample(double dt_seconds) {
-    const double speed_step = limits_.max_accel_kmh_per_s * dt_seconds;
+    const bool accelerating = target_speed_ >= speed_;
+    const double rate = accelerating ? limits_.max_accel_kmh_per_s : limits_.max_decel_kmh_per_s;
+    const double speed_step = std::max(0.01, rate) * dt_seconds;
     const double incline_step = limits_.max_incline_rate_percent_per_s * dt_seconds;
 
     if (state_ == MachineState::Running || state_ == MachineState::Stopping) {
@@ -118,17 +120,24 @@ CommandResult TreadmillController::set_direction(Direction direction) {
     return r;
 }
 
+void TreadmillController::reset_session_locked(SessionKind kind, const std::string& program_id) {
+    telemetry_.session = kind;
+    telemetry_.active_program_id = program_id;
+    telemetry_.interval_index = -1;
+    telemetry_.interval_remaining_seconds = 0.0;
+    telemetry_.distance_km = 0.0;
+    telemetry_.elapsed_seconds = 0.0;
+    telemetry_.energy_kcal_estimate = 0.0;
+    telemetry_.mechanical_power_w_estimate = 0.0;
+    telemetry_.max_heart_rate_bpm = telemetry_.heart_rate_bpm;
+    telemetry_.notice.clear();
+}
+
 CommandResult TreadmillController::start_free() {
     std::lock_guard lock(mutex_);
     if (telemetry_.state == MachineState::EmergencyStopped) return fail("emergency stop is active");
     active_program_ = {};
-    telemetry_.session = SessionKind::FreeRun;
-    telemetry_.active_program_id.clear();
-    telemetry_.interval_index = -1;
-    telemetry_.distance_km = 0.0;
-    telemetry_.elapsed_seconds = 0.0;
-    telemetry_.energy_kcal_estimate = 0.0;
-    telemetry_.notice.clear();
+    reset_session_locked(SessionKind::FreeRun);
     if (telemetry_.target_speed_kmh <= 0.0) telemetry_.target_speed_kmh = 1.0;
     driver_->set_speed(telemetry_.target_speed_kmh);
     driver_->set_incline(telemetry_.target_incline_percent);
@@ -147,17 +156,33 @@ CommandResult TreadmillController::start_program(const Protocol& program, Sessio
     active_program_ = program;
     active_interval_ = 0;
     interval_elapsed_ = 0.0;
-    telemetry_.session = kind;
-    telemetry_.active_program_id = program.id;
-    telemetry_.distance_km = 0.0;
-    telemetry_.elapsed_seconds = 0.0;
-    telemetry_.energy_kcal_estimate = 0.0;
-    telemetry_.notice.clear();
+    reset_session_locked(kind, program.id);
     apply_interval_locked(0);
     auto r = driver_->start();
     if (!r.ok) return r;
     last_heartbeat_ = std::chrono::steady_clock::now();
     return ok("program started");
+}
+
+CommandResult TreadmillController::start_heart_rate(const HeartRateProgram& program) {
+    std::lock_guard lock(mutex_);
+    if (telemetry_.state == MachineState::EmergencyStopped) return fail("emergency stop is active");
+    if (program.min_bpm < 30 || program.max_bpm > 240 || program.min_bpm >= program.max_bpm) return fail("invalid heart-rate range");
+    if (program.min_speed_kmh < 0.0 || program.max_speed_kmh > limits_.max_speed_kmh || program.min_speed_kmh > program.max_speed_kmh) return fail("invalid speed range");
+    if (program.incline_percent < 0.0 || program.incline_percent > limits_.max_incline_percent) return fail("incline is outside configured limits");
+
+    active_program_ = {};
+    heart_rate_program_ = program;
+    heart_rate_adjust_elapsed_ = 0.0;
+    reset_session_locked(SessionKind::HeartRate, "heart_rate_control");
+    telemetry_.target_speed_kmh = program.min_speed_kmh;
+    telemetry_.target_incline_percent = program.incline_percent;
+    driver_->set_speed(telemetry_.target_speed_kmh);
+    driver_->set_incline(telemetry_.target_incline_percent);
+    auto r = driver_->start();
+    if (!r.ok) return r;
+    last_heartbeat_ = std::chrono::steady_clock::now();
+    return ok("heart-rate control started");
 }
 
 CommandResult TreadmillController::stop() {
@@ -192,12 +217,34 @@ void TreadmillController::set_heart_rate(int bpm) {
     telemetry_.max_heart_rate_bpm = std::max(telemetry_.max_heart_rate_bpm, telemetry_.heart_rate_bpm);
 }
 
+CommandResult TreadmillController::update_limits(const Limits& limits) {
+    if (limits.max_speed_kmh <= 0.0 || limits.max_incline_percent < 0.0 ||
+        limits.max_accel_kmh_per_s <= 0.0 || limits.max_decel_kmh_per_s <= 0.0 ||
+        limits.max_incline_rate_percent_per_s <= 0.0 || limits.watchdog_seconds < 0.0) {
+        return fail("invalid limits");
+    }
+    std::lock_guard lock(mutex_);
+    if (telemetry_.state == MachineState::Running || telemetry_.state == MachineState::Stopping) {
+        return fail("limits can only be changed while the belt is stopped");
+    }
+    limits_ = limits;
+    driver_->configure(limits_);
+    telemetry_.target_speed_kmh = std::min(telemetry_.target_speed_kmh, limits_.max_speed_kmh);
+    telemetry_.target_incline_percent = std::min(telemetry_.target_incline_percent, limits_.max_incline_percent);
+    driver_->set_speed(telemetry_.target_speed_kmh);
+    driver_->set_incline(telemetry_.target_incline_percent);
+    return ok("limits updated");
+}
+
 Telemetry TreadmillController::telemetry() const {
     std::lock_guard lock(mutex_);
     return telemetry_;
 }
 
-Limits TreadmillController::limits() const { return limits_; }
+Limits TreadmillController::limits() const {
+    std::lock_guard lock(mutex_);
+    return limits_;
+}
 
 void TreadmillController::worker_loop() {
     auto previous = std::chrono::steady_clock::now();
@@ -256,6 +303,30 @@ void TreadmillController::tick(double dt_seconds) {
             }
         }
     }
+
+    if (telemetry_.session == SessionKind::HeartRate && sample.state == MachineState::Running) {
+        heart_rate_adjust_elapsed_ += dt_seconds;
+        if (heart_rate_adjust_elapsed_ >= heart_rate_program_.adjust_period_seconds) {
+            heart_rate_adjust_elapsed_ = 0.0;
+            if (telemetry_.heart_rate_bpm <= 0) {
+                telemetry_.notice = "waiting for heart-rate sensor";
+            } else {
+                double target = telemetry_.target_speed_kmh;
+                if (telemetry_.heart_rate_bpm < heart_rate_program_.min_bpm) {
+                    target += heart_rate_program_.speed_step_kmh;
+                    telemetry_.notice = "heart rate below target: speed increased";
+                } else if (telemetry_.heart_rate_bpm > heart_rate_program_.max_bpm) {
+                    target -= heart_rate_program_.speed_step_kmh;
+                    telemetry_.notice = "heart rate above target: speed decreased";
+                } else {
+                    telemetry_.notice = "heart rate in target zone";
+                }
+                target = std::clamp(target, heart_rate_program_.min_speed_kmh, heart_rate_program_.max_speed_kmh);
+                driver_->set_speed(target);
+                telemetry_.target_speed_kmh = target;
+            }
+        }
+    }
 }
 
 void TreadmillController::apply_interval_locked(std::size_t index) {
@@ -298,6 +369,7 @@ std::string to_string(SessionKind value) {
         case SessionKind::FreeRun: return "free";
         case SessionKind::Protocol: return "protocol";
         case SessionKind::Profile: return "profile";
+        case SessionKind::HeartRate: return "heart_rate";
     }
     return "none";
 }
