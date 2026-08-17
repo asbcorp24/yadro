@@ -122,21 +122,19 @@ public:
         CEF_REQUIRE_UI_THREAD();
         browser_ = browser;
 #if defined(_WIN32)
-        if (fullscreen_) {
-            const HWND hwnd = browser->GetHost()->GetWindowHandle();
-            if (hwnd) {
-                MONITORINFO monitor_info{};
-                monitor_info.cbSize = sizeof(monitor_info);
-                const HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-                if (GetMonitorInfo(monitor, &monitor_info)) {
-                    SetWindowLongPtr(hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
-                    SetWindowPos(hwnd, HWND_TOP,
-                                 monitor_info.rcMonitor.left,
-                                 monitor_info.rcMonitor.top,
-                                 monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
-                                 monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
-                                 SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-                }
+        const HWND hwnd = browser->GetHost()->GetWindowHandle();
+        if (hwnd && fullscreen_) {
+            MONITORINFO monitor_info{};
+            monitor_info.cbSize = sizeof(monitor_info);
+            const HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            if (GetMonitorInfo(monitor, &monitor_info)) {
+                SetWindowLongPtr(hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+                SetWindowPos(hwnd, HWND_TOP,
+                             monitor_info.rcMonitor.left,
+                             monitor_info.rcMonitor.top,
+                             monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
+                             monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
+                             SWP_FRAMECHANGED | SWP_SHOWWINDOW);
             }
         }
 #endif
@@ -200,6 +198,10 @@ public:
 
         CefWindowInfo window_info;
         window_info.SetAsPopup(nullptr, "REMOTION");
+        // CEF 125+ defaults windowed browsers to Chrome style, which renders
+        // Chrome's tabs/omnibox/toolbar. REMOTION is an embedded kiosk shell,
+        // so force Alloy style for this browser: only the web content is shown.
+        window_info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
 
         CefBrowserSettings browser_settings;
         browser_settings.javascript = STATE_ENABLED;
