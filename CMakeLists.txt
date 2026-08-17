@@ -10,6 +10,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # FetchContent/Ninja build can mix cmd.exe and /bin/sh path semantics.
 option(YADRO_FETCH_DEPS "Download pinned header-only dependencies when system packages are unavailable" ON)
 option(YADRO_VENDOR_WEB_DEPS "Download pinned web dependencies into data/static/vendor for offline runtime" ON)
+option(YADRO_WITH_CEF "Build REMOTION fullscreen Chromium shell using a local CEF binary distribution" OFF)
+set(CEF_ROOT "" CACHE PATH "Path to an unpacked CEF binary distribution")
 
 find_package(Threads REQUIRED)
 
@@ -93,11 +95,15 @@ if(YADRO_VENDOR_WEB_DEPS)
     )
 endif()
 
-add_executable(yadro
-    src/main.cpp
+set(YADRO_CORE_SOURCES
     src/treadmill.cpp
     src/protocols.cpp
     src/web_server.cpp
+)
+
+add_executable(yadro
+    src/main.cpp
+    ${YADRO_CORE_SOURCES}
 )
 
 target_include_directories(yadro PRIVATE src)
@@ -111,6 +117,58 @@ if(MSVC)
     target_compile_options(yadro PRIVATE /W4 /permissive-)
 else()
     target_compile_options(yadro PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(YADRO_WITH_CEF)
+    if(CMAKE_VERSION VERSION_LESS 3.21)
+        message(FATAL_ERROR "CEF integration requires CMake 3.21 or newer")
+    endif()
+    if(NOT CEF_ROOT OR NOT EXISTS "${CEF_ROOT}/cmake/FindCEF.cmake")
+        message(FATAL_ERROR
+            "YADRO_WITH_CEF=ON requires CEF_ROOT to point to an unpacked CEF binary distribution. "
+            "Example: -DCEF_ROOT=C:/dev/cef_binary_..._windows64")
+    endif()
+    if(WIN32 AND NOT MSVC)
+        message(FATAL_ERROR
+            "The REMOTION CEF shell on Windows must be built with the Visual Studio 2022/MSVC toolchain. "
+            "Keep using MSYS2/UCRT64 for the core-only yadro target, or configure a separate MSVC build for CEF.")
+    endif()
+
+    list(APPEND CMAKE_MODULE_PATH "${CEF_ROOT}/cmake")
+    find_package(CEF REQUIRED)
+    add_subdirectory("${CEF_LIBCEF_DLL_WRAPPER_PATH}" libcef_dll_wrapper)
+
+    add_executable(remotion
+        src/remotion_shell.cpp
+        ${YADRO_CORE_SOURCES}
+    )
+    target_include_directories(remotion PRIVATE src "${CEF_ROOT}")
+    target_link_libraries(remotion PRIVATE
+        Threads::Threads
+        nlohmann_json::nlohmann_json
+        httplib::httplib
+        libcef_lib
+        libcef_dll_wrapper
+        ${CEF_STANDARD_LIBS}
+    )
+    add_dependencies(remotion libcef_dll_wrapper)
+    SET_EXECUTABLE_TARGET_PROPERTIES(remotion)
+
+    if(WIN32)
+        target_link_libraries(remotion PRIVATE ws2_32)
+    endif()
+    if(MSVC)
+        target_compile_options(remotion PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(remotion PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    # Copy the Chromium runtime beside remotion after build. The CEF binary
+    # distribution provides these lists/macros through FindCEF.cmake.
+    COPY_FILES(remotion "${CEF_BINARY_FILES}" "${CEF_BINARY_DIR}" "${CEF_TARGET_OUT_DIR}")
+    COPY_FILES(remotion "${CEF_RESOURCE_FILES}" "${CEF_RESOURCE_DIR}" "${CEF_TARGET_OUT_DIR}")
+
+    install(TARGETS remotion RUNTIME DESTINATION .)
 endif()
 
 install(TARGETS yadro RUNTIME DESTINATION bin)
