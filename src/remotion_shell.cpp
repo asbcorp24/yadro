@@ -8,6 +8,7 @@
 #include "include/cef_context_menu_handler.h"
 #include "include/cef_life_span_handler.h"
 #include "include/cef_request_handler.h"
+#include "include/wrapper/cef_helpers.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -46,8 +47,6 @@ Options parse_args(int argc, char** argv) {
             return argv[++i];
         };
 
-        // CEF renderer/GPU subprocesses are handled by CefExecuteProcess before
-        // this parser is reached. Browser-process Chromium switches are ignored.
         if (arg == "--bind") options.bind = next();
         else if (arg == "--port") options.port = std::stoi(next());
         else if (arg == "--data") options.data_dir = next();
@@ -71,8 +70,7 @@ Options parse_args(int argc, char** argv) {
                 << "  --start-page <path>  initial local page (default /account-select.html)\n";
             std::exit(0);
         } else if (arg.rfind("--", 0) == 0) {
-            // Chromium may append browser-process switches. They are not YADRO
-            // application options and must not make the medical UI fail to boot.
+            // Browser-process Chromium switches are not application options.
             continue;
         } else {
             throw std::runtime_error("unknown option: " + arg);
@@ -121,6 +119,7 @@ public:
     CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
 
     void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
+        CEF_REQUIRE_UI_THREAD();
         browser_ = browser;
 #if defined(_WIN32)
         if (fullscreen_) {
@@ -140,8 +139,6 @@ public:
                 }
             }
         }
-#else
-        (void)fullscreen_;
 #endif
     }
 
@@ -151,6 +148,7 @@ public:
     }
 
     void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
+        CEF_REQUIRE_UI_THREAD();
         (void)browser;
         browser_ = nullptr;
         CefQuitMessageLoop();
