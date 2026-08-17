@@ -11,6 +11,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Audit offline UI
+        run: python3 scripts/check_static_ui.py
       - name: Build
         run: cmake --build build
 
@@ -30,7 +32,10 @@ jobs:
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-python
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Audit offline UI
+        run: python scripts/check_static_ui.py
       - name: Build
         run: cmake --build build
