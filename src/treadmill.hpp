@@ -13,12 +13,13 @@ namespace yadro {
 
 enum class MachineState { Stopped, Running, Stopping, EmergencyStopped, Fault };
 enum class Direction { Forward, Reverse };
-enum class SessionKind { None, FreeRun, Protocol, Profile };
+enum class SessionKind { None, FreeRun, Protocol, Profile, HeartRate };
 
 struct Limits {
     double max_speed_kmh{20.0};
     double max_incline_percent{25.0};
     double max_accel_kmh_per_s{4.0};
+    double max_decel_kmh_per_s{4.0};
     double max_incline_rate_percent_per_s{4.0};
     double watchdog_seconds{5.0};
 };
@@ -37,6 +38,16 @@ struct Protocol {
     bool implemented{true};
     bool standard{false};
     std::vector<Interval> intervals;
+};
+
+struct HeartRateProgram {
+    int min_bpm{100};
+    int max_bpm{130};
+    double min_speed_kmh{1.0};
+    double max_speed_kmh{6.0};
+    double incline_percent{0.0};
+    double speed_step_kmh{0.2};
+    double adjust_period_seconds{5.0};
 };
 
 struct DriverSample {
@@ -121,11 +132,13 @@ public:
     CommandResult set_direction(Direction direction);
     CommandResult start_free();
     CommandResult start_program(const Protocol& program, SessionKind kind);
+    CommandResult start_heart_rate(const HeartRateProgram& program);
     CommandResult stop();
     CommandResult emergency_stop();
     CommandResult reset_emergency();
     void heartbeat();
     void set_heart_rate(int bpm);
+    CommandResult update_limits(const Limits& limits);
 
     [[nodiscard]] Telemetry telemetry() const;
     [[nodiscard]] Limits limits() const;
@@ -135,14 +148,17 @@ private:
     void tick(double dt_seconds);
     void apply_interval_locked(std::size_t index);
     void stop_locked(const std::string& notice = {});
+    void reset_session_locked(SessionKind kind, const std::string& program_id = {});
 
     std::unique_ptr<ITreadmillDriver> driver_;
     Limits limits_{};
     mutable std::mutex mutex_;
     Telemetry telemetry_{};
     Protocol active_program_{};
+    HeartRateProgram heart_rate_program_{};
     std::size_t active_interval_{0};
     double interval_elapsed_{0.0};
+    double heart_rate_adjust_elapsed_{0.0};
     std::chrono::steady_clock::time_point last_heartbeat_;
     std::atomic<bool> running_{true};
     std::thread worker_;
