@@ -136,6 +136,13 @@ if(YADRO_WITH_CEF)
 
     list(APPEND CMAKE_MODULE_PATH "${CEF_ROOT}/cmake")
     find_package(CEF REQUIRED)
+
+    # FindCEF.cmake exposes the Debug/Release libcef import libraries as file
+    # paths. Create the standard logical target before linking the application;
+    # otherwise CMake treats "libcef_lib" as a literal filename and MSVC looks
+    # for a non-existent libcef_lib.lib.
+    ADD_LOGICAL_TARGET("libcef_lib" "${CEF_LIB_DEBUG}" "${CEF_LIB_RELEASE}")
+
     add_subdirectory("${CEF_LIBCEF_DLL_WRAPPER_PATH}" libcef_dll_wrapper)
 
     add_executable(remotion
@@ -167,8 +174,11 @@ if(YADRO_WITH_CEF)
         target_compile_options(remotion PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 
-    # Copy the Chromium runtime beside remotion after build. The CEF binary
-    # distribution provides these lists/macros through FindCEF.cmake.
+    # With the Ninja generator CEF_TARGET_OUT_DIR is not populated by a
+    # multi-config IDE. Explicitly point it at the directory containing
+    # remotion.exe so libcef.dll, .pak files and locales are copied next to the
+    # executable instead of accidentally targeting the filesystem root.
+    set(CEF_TARGET_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}")
     COPY_FILES(remotion "${CEF_BINARY_FILES}" "${CEF_BINARY_DIR}" "${CEF_TARGET_OUT_DIR}")
     COPY_FILES(remotion "${CEF_RESOURCE_FILES}" "${CEF_RESOURCE_DIR}" "${CEF_TARGET_OUT_DIR}")
 
