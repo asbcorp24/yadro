@@ -31,6 +31,7 @@ REQUIRED_SCREENS = {
     "patient-history.html",
     "history.html",
     "history-detail.html",
+    "statistics.html",
     "settings.html",
     "acceleration.html",
     "calibration.html",
@@ -45,6 +46,13 @@ REQUIRED_SCREENS = {
 GENERATED_VENDOR_ASSETS = {
     "vendor/bootstrap/bootstrap.min.css",
     "vendor/bootstrap/bootstrap.bundle.min.js",
+}
+
+REQUIRED_LOCAL_ASSETS = {
+    "app.js",
+    "style.css",
+    "charts.js",
+    "charts.css",
 }
 
 REF_RE = re.compile(r"(?:href|src)\s*=\s*[\"']([^\"']+)[\"']", re.I)
@@ -73,9 +81,9 @@ def main() -> int:
     if missing:
         errors.append("missing required screens: " + ", ".join(missing))
 
-    for asset in sorted(GENERATED_VENDOR_ASSETS):
+    for asset in sorted(GENERATED_VENDOR_ASSETS | REQUIRED_LOCAL_ASSETS):
         if not (STATIC / asset).is_file():
-            errors.append(f"offline Bootstrap asset missing after CMake configure: {asset}")
+            errors.append(f"required offline asset missing: {asset}")
 
     for page in sorted(STATIC.glob("*.html")):
         text = page.read_text(encoding="utf-8")
@@ -92,7 +100,6 @@ def main() -> int:
                 continue
             if not target:
                 continue
-            # API routes and browser-created query links are not static files.
             if target.startswith("api/"):
                 continue
             target_path = STATIC / target
@@ -109,13 +116,21 @@ def main() -> int:
     if "vendor/bootstrap/bootstrap.bundle.min.js" not in app:
         errors.append("app.js: local Bootstrap bundle loader is missing")
 
+    stats = (STATIC / "statistics.html").read_text(encoding="utf-8") if (STATIC / "statistics.html").exists() else ""
+    patient_stats = (STATIC / "patient-stats.html").read_text(encoding="utf-8") if (STATIC / "patient-stats.html").exists() else ""
+    for name, text in (("statistics.html", stats), ("patient-stats.html", patient_stats)):
+        if 'src="charts.js"' not in text:
+            errors.append(f"{name}: charts.js is not linked")
+        if 'href="charts.css"' not in text:
+            errors.append(f"{name}: charts.css is not linked")
+
     if errors:
         print("Static UI audit FAILED")
         for error in errors:
             print(" -", error)
         return 1
 
-    print(f"Static UI audit OK: {len(present)} HTML screens; Bootstrap assets are local; no external HTML runtime references.")
+    print(f"Static UI audit OK: {len(present)} HTML screens; Bootstrap and chart assets are local; no external HTML runtime references.")
     return 0
 
 
