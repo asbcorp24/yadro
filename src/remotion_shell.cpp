@@ -70,7 +70,6 @@ Options parse_args(int argc, char** argv) {
                 << "  --start-page <path>  initial local page (default /account-select.html)\n";
             std::exit(0);
         } else if (arg.rfind("--", 0) == 0) {
-            // Browser-process Chromium switches are not application options.
             continue;
         } else {
             throw std::runtime_error("unknown option: " + arg);
@@ -105,6 +104,18 @@ bool is_local_ui_url(const std::string& url, int port) {
     const std::string p = std::to_string(port);
     return url.rfind("http://127.0.0.1:" + p + "/", 0) == 0 ||
            url.rfind("http://localhost:" + p + "/", 0) == 0;
+}
+
+std::filesystem::path executable_dir() {
+#if defined(_WIN32)
+    std::wstring buffer(32768, L'\0');
+    const DWORD len = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+    if (len == 0 || len >= buffer.size()) return std::filesystem::current_path();
+    buffer.resize(len);
+    return std::filesystem::path(buffer).parent_path();
+#else
+    return std::filesystem::current_path();
+#endif
 }
 
 class ShellClient final : public CefClient,
@@ -198,9 +209,6 @@ public:
 
         CefWindowInfo window_info;
         window_info.SetAsPopup(nullptr, "REMOTION");
-        // CEF 125+ defaults windowed browsers to Chrome style, which renders
-        // Chrome's tabs/omnibox/toolbar. REMOTION is an embedded kiosk shell,
-        // so force Alloy style for this browser: only the web content is shown.
         window_info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
 
         CefBrowserSettings browser_settings;
@@ -241,6 +249,27 @@ bool initialize_cef(int argc, char** argv, CefRefPtr<ShellApp> app) {
     settings.no_sandbox = true;
     settings.log_severity = LOGSEVERITY_WARNING;
     settings.persist_session_cookies = false;
+
+#if defined(_WIN32)
+    const auto runtime_dir = executable_dir();
+    const auto locales_dir = runtime_dir / "locales";
+
+    const auto icu_file = runtime_dir / "icudtl.dat";
+    const auto resources_file = runtime_dir / "resources.pak";
+    if (!std::filesystem::exists(icu_file) || !std::filesystem::exists(resources_file) ||
+        !std::filesystem::is_directory(locales_dir)) {
+        std::cerr << "CEF runtime is incomplete beside remotion.exe\n"
+                  << "Expected: " << icu_file.string() << "\n"
+                  << "          " << resources_file.string() << "\n"
+                  << "          " << locales_dir.string() << "\n";
+        return false;
+    }
+
+    CefString(&settings.resources_dir_path) = runtime_dir.wstring();
+    CefString(&settings.locales_dir_path) = locales_dir.wstring();
+    std::cout << "CEF resources: " << runtime_dir.string() << "\n";
+#endif
+
     return CefInitialize(main_args, settings, app, nullptr);
 }
 
