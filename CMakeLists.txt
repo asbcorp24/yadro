@@ -114,7 +114,7 @@ if(WIN32)
 endif()
 
 if(MSVC)
-    target_compile_options(yadro PRIVATE /W4 /permissive-)
+    target_compile_options(yadro PRIVATE /EHsc /W4 /permissive-)
 else()
     target_compile_options(yadro PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -158,7 +158,11 @@ if(YADRO_WITH_CEF)
         target_link_libraries(remotion PRIVATE ws2_32)
     endif()
     if(MSVC)
-        target_compile_options(remotion PRIVATE /W4 /permissive-)
+        # CEF's default target properties disable exception unwinding, while
+        # cpp-httplib uses C++ exceptions internally. Re-enable /EHsc on the
+        # application target after applying the CEF properties; otherwise CEF's
+        # /WX promotes httplib warning C4530 to error C2220.
+        target_compile_options(remotion PRIVATE /EHsc /W4 /permissive-)
     else()
         target_compile_options(remotion PRIVATE -Wall -Wextra -Wpedantic)
     endif()
