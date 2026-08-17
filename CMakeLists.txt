@@ -9,12 +9,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # The fallback no longer uses FetchContent: under MSYS2/UCRT64 a nested
 # FetchContent/Ninja build can mix cmd.exe and /bin/sh path semantics.
 option(YADRO_FETCH_DEPS "Download pinned header-only dependencies when system packages are unavailable" ON)
+option(YADRO_VENDOR_WEB_DEPS "Download pinned web dependencies into data/static/vendor for offline runtime" ON)
 
 find_package(Threads REQUIRED)
 
 set(YADRO_DEPS_DIR "${CMAKE_BINARY_DIR}/_deps/yadro_headers")
 
-function(yadro_download_header url output_file)
+function(yadro_download_file url output_file)
     if(EXISTS "${output_file}")
         return()
     endif()
@@ -23,7 +24,7 @@ function(yadro_download_header url output_file)
     file(MAKE_DIRECTORY "${output_dir}")
     set(tmp_file "${output_file}.download")
 
-    message(STATUS "Downloading dependency header: ${url}")
+    message(STATUS "Downloading dependency: ${url}")
     file(DOWNLOAD
         "${url}"
         "${tmp_file}"
@@ -49,7 +50,7 @@ if(NOT nlohmann_json_FOUND)
     endif()
 
     set(YADRO_JSON_HEADER "${YADRO_DEPS_DIR}/nlohmann/include/nlohmann/json.hpp")
-    yadro_download_header(
+    yadro_download_file(
         "https://raw.githubusercontent.com/nlohmann/json/v3.11.3/single_include/nlohmann/json.hpp"
         "${YADRO_JSON_HEADER}"
     )
@@ -68,7 +69,7 @@ if(NOT httplib_FOUND)
     endif()
 
     set(YADRO_HTTPLIB_HEADER "${YADRO_DEPS_DIR}/httplib/include/httplib.h")
-    yadro_download_header(
+    yadro_download_file(
         "https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.15.3/httplib.h"
         "${YADRO_HTTPLIB_HEADER}"
     )
@@ -76,6 +77,20 @@ if(NOT httplib_FOUND)
     target_include_directories(yadro_httplib INTERFACE
         "${YADRO_DEPS_DIR}/httplib/include")
     add_library(httplib::httplib ALIAS yadro_httplib)
+endif()
+
+# Bootstrap is copied into the static tree so the control panel has no CDN or
+# Internet dependency at runtime. The version is pinned for reproducibility.
+if(YADRO_VENDOR_WEB_DEPS)
+    set(YADRO_BOOTSTRAP_DIR "${CMAKE_SOURCE_DIR}/data/static/vendor/bootstrap")
+    yadro_download_file(
+        "https://raw.githubusercontent.com/twbs/bootstrap/v5.3.3/dist/css/bootstrap.min.css"
+        "${YADRO_BOOTSTRAP_DIR}/bootstrap.min.css"
+    )
+    yadro_download_file(
+        "https://raw.githubusercontent.com/twbs/bootstrap/v5.3.3/dist/js/bootstrap.bundle.min.js"
+        "${YADRO_BOOTSTRAP_DIR}/bootstrap.bundle.min.js"
+    )
 endif()
 
 add_executable(yadro
