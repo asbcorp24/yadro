@@ -165,6 +165,78 @@ const dl=new THREE.DirectionalLight(0xffffff,1.2);dl.position.set(2,5,-1);scene.
 const world=new THREE.Group();scene.add(world);
 let beltMesh,safeMesh,pointsObj,leftFoot,rightFoot,sensorMesh;
 function mat(color,opacity=1){return new THREE.MeshStandardMaterial({color,transparent:opacity<1,opacity,roughness:.7,metalness:.05,side:THREE.DoubleSide})}
+
+function createFootMesh(color,isLeft=true){
+ const group=new THREE.Group();
+ const mainMat=new THREE.MeshStandardMaterial({color,roughness:.52,metalness:.06});
+ const darkColor=new THREE.Color(color).multiplyScalar(.72);
+ const darkMat=new THREE.MeshStandardMaterial({color:darkColor,roughness:.72,metalness:.03});
+
+ const shape=new THREE.Shape();
+ shape.moveTo(-.032,-.115);
+ shape.quadraticCurveTo(-.060,-.090,-.054,-.038);
+ shape.quadraticCurveTo(-.050,.010,-.033,.058);
+ shape.quadraticCurveTo(-.020,.105,.010,.145);
+ shape.quadraticCurveTo(.045,.178,.078,.145);
+ shape.quadraticCurveTo(.092,.118,.083,.083);
+ shape.quadraticCurveTo(.074,.045,.060,.010);
+ shape.quadraticCurveTo(.052,-.035,.042,-.072);
+ shape.quadraticCurveTo(.027,-.112,.000,-.121);
+ shape.quadraticCurveTo(-.016,-.126,-.032,-.115);
+
+ const geom=new THREE.ExtrudeGeometry(shape,{
+  depth:.038,
+  bevelEnabled:true,
+  bevelThickness:.007,
+  bevelSize:.006,
+  bevelSegments:2,
+  curveSegments:18
+ });
+ geom.center();
+ const body=new THREE.Mesh(geom,mainMat);
+ body.rotation.x=Math.PI/2;
+ body.rotation.z=Math.PI;
+ body.scale.set(1,1.05,1);
+ body.position.y=.025;
+ group.add(body);
+
+ const heel=new THREE.Mesh(new THREE.SphereGeometry(.031,16,12),darkMat);
+ heel.scale.set(1.12,.68,1.0);
+ heel.position.set(0,.028,-.090);
+ group.add(heel);
+
+ const arch=new THREE.Mesh(new THREE.SphereGeometry(.038,16,12),mainMat);
+ arch.scale.set(.95,.58,1.20);
+ arch.position.set(-.002,.035,-.018);
+ group.add(arch);
+
+ const fore=new THREE.Mesh(new THREE.SphereGeometry(.043,18,14),mainMat);
+ fore.scale.set(1.22,.66,1.02);
+ fore.position.set(.006,.031,.067);
+ group.add(fore);
+
+ const toes=[
+  {x:.024,z:.138,r:.016},
+  {x:.009,z:.145,r:.0135},
+  {x:-.007,z:.141,r:.0125},
+  {x:-.021,z:.134,r:.0115},
+  {x:-.033,z:.124,r:.0105}
+ ];
+ for(const t of toes){
+  const toe=new THREE.Mesh(new THREE.SphereGeometry(t.r,12,10),darkMat);
+  toe.scale.set(1.15,.78,1.0);
+  toe.position.set(t.x,.021,t.z);
+  group.add(toe);
+ }
+
+ // Mirror geometry for the right foot while preserving forward direction.
+ if(!isLeft) group.scale.x=-1;
+
+ group.userData.baseYaw=isLeft?.16:-.16;
+ group.rotation.y=group.userData.baseYaw;
+ return group;
+}
+
 function rebuildScene(c){
  while(world.children.length)world.remove(world.children[0]);
  const L=Math.max(.8,Number(c?.belt_length_m)||2), W=Math.max(.45,Number(c?.belt_width_m)||.8);
@@ -176,9 +248,8 @@ function rebuildScene(c){
  safeMesh.rotation.x=-Math.PI/2;safeMesh.position.set(0,.004,(Number(c?.front_margin_m)||0)+safeL/2);world.add(safeMesh);
  const edge=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W,.06,L)),new THREE.LineBasicMaterial({color:0x6ea6d7}));edge.position.set(0,-.033,L/2);world.add(edge);
  const sensorG=new THREE.CylinderGeometry(.045,.06,.09,24);sensorMesh=new THREE.Mesh(sensorG,mat(0x2ee6a6));sensorMesh.position.set(Number(c?.sensor_y_m)||0,.06,Number(c?.sensor_x_m)||0);world.add(sensorMesh);
- const footG=new THREE.CapsuleGeometry(.055,.16,5,12);
- leftFoot=new THREE.Mesh(footG,mat(0x31e7a7));leftFoot.rotation.x=Math.PI/2;leftFoot.visible=false;world.add(leftFoot);
- rightFoot=new THREE.Mesh(footG,mat(0xff7d8d));rightFoot.rotation.x=Math.PI/2;rightFoot.visible=false;world.add(rightFoot);
+ leftFoot=createFootMesh(0x31e7a7,true);leftFoot.visible=false;world.add(leftFoot);
+ rightFoot=createFootMesh(0xff7d8d,false);rightFoot.visible=false;world.add(rightFoot);
  const pg=new THREE.BufferGeometry();pg.setAttribute('position',new THREE.Float32BufferAttribute([],3));
  pointsObj=new THREE.Points(pg,new THREE.PointsMaterial({color:0x4ab8ff,size:.018,sizeAttenuation:true,transparent:true,opacity:.9}));world.add(pointsObj);
  camera.position.set(Math.max(1.7,W*2.2),Math.max(2,L*1.25),L*1.28);camera.lookAt(0,0,L*.5);
@@ -196,7 +267,13 @@ function updateCloud(points,c){
  pointsObj.geometry.setAttribute('position',new THREE.Float32BufferAttribute(arr,3));
  pointsObj.geometry.computeBoundingSphere();
 }
-function updateFoot(mesh,f){if(!mesh)return;mesh.visible=!!f?.valid;if(mesh.visible)mesh.position.set(Number(f.y_m)||0,.075,Number(f.x_m)||0)}
+function updateFoot(mesh,f,isLeft=true){
+ if(!mesh)return;
+ mesh.visible=!!f?.valid;
+ if(!mesh.visible)return;
+ mesh.position.set(Number(f.y_m)||0,.028,Number(f.x_m)||0);
+ mesh.rotation.y=mesh.userData.baseYaw??(isLeft?.16:-.16);
+}
 function resize3d(){const w=canvas.clientWidth,h=canvas.clientHeight;if(canvas.width!==Math.round(w*renderer.getPixelRatio())||canvas.height!==Math.round(h*renderer.getPixelRatio()))renderer.setSize(w,h,false);camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix()}
 function animate(){resize3d();renderer.render(scene,camera);requestAnimationFrame(animate)}requestAnimationFrame(animate);
 
@@ -243,7 +320,7 @@ function render(t,c,points){
  $('stepDiff').textContent=valid?Math.abs(Number(t.current_step_left_cm)-Number(t.current_step_right_cm)).toFixed(1):'—';
  $('cycleDiff').textContent=valid?Math.abs(Number(t.cycle_left_s)-Number(t.cycle_right_s)).toFixed(2):'—';
  $('leftXY').textContent=xy(t.left);$('rightXY').textContent=xy(t.right);
- updateCloud(points,c);updateFoot(leftFoot,t.left);updateFoot(rightFoot,t.right);pushHistory(t);
+ updateCloud(points,c);updateFoot(leftFoot,t.left,true);updateFoot(rightFoot,t.right,false);pushHistory(t);
 }
 let autoStartTried=false;
 async function poll(){
