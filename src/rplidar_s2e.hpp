@@ -83,6 +83,8 @@ struct RplidarS2ETelemetry {
     double symmetry_time_percent{0.0};
     double symmetry_x_percent{0.0};
     double symmetry_y_percent{0.0};
+    double longitudinal_symmetry_percent{0.0};
+    double transverse_symmetry_percent{0.0};
 
     std::string safety_state{"not_configured"}; // not_configured/safe/warning/critical
     std::string safety_reason;
@@ -144,6 +146,7 @@ private:
     void update_safety();
     void update_metrics();
     static double symmetry(double right, double left);
+    static double symmetry_score(double right, double left);
 
     mutable std::mutex mutex_;
     RplidarS2EConfig config_;
