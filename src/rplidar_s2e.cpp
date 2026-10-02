@@ -307,8 +307,16 @@ void RplidarS2E::update_metrics() {
         symmetry(average(right_track_.step_y_history), average(left_track_.step_y_history));
     telemetry_.longitudinal_symmetry_percent =
         symmetry_score(average(right_track_.step_x_history), average(left_track_.step_x_history));
-    telemetry_.transverse_symmetry_percent =
-        symmetry_score(average(right_track_.step_y_history), average(left_track_.step_y_history));
+
+    // Transverse symmetry is based on the lateral distance of each tracked foot
+    // from the treadmill centre line.  Using absolute Y avoids reporting the
+    // expected left/right sign difference as an artificial asymmetry.
+    if (telemetry_.left.valid && telemetry_.right.valid) {
+        telemetry_.transverse_symmetry_percent =
+            symmetry_score(std::abs(telemetry_.right.y_m), std::abs(telemetry_.left.y_m));
+    } else {
+        telemetry_.transverse_symmetry_percent = 0.0;
+    }
 
     telemetry_.metrics_valid =
         !left_track_.cycle_history.empty() &&
