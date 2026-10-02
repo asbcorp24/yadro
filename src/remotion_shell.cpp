@@ -230,7 +230,6 @@ public:
         CefBrowserSettings browser_settings;
         browser_settings.javascript = STATE_ENABLED;
         browser_settings.webgl = STATE_ENABLED;
-        browser_settings.accelerated_2d_canvas = STATE_ENABLED;
 
         CefRefPtr<ShellClient> client = new ShellClient(port_, fullscreen_);
         if (!CefBrowserHost::CreateBrowser(window_info, client, start_url_, browser_settings, nullptr, nullptr)) {
