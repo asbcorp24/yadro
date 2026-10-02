@@ -94,6 +94,61 @@ remotion.exe --bind 127.0.0.1
 
 `yadro.exe` по-прежнему можно собирать текущей цепочкой MSYS2/UCRT64. CEF shell вынесен в отдельный опциональный target, чтобы тяжёлая Chromium-зависимость не ломала существующую CI/сборку ядра. При `YADRO_WITH_CEF=ON` на Windows CMake требует MSVC.
 
+## RPLIDAR S2E
+
+Поддержка S2E вынесена в отдельный модуль `src/rplidar_s2e.*`. Модуль использует официальный SLAMTEC RPLIDAR SDK и UDP-канал, а web-пульт работает через REST API ядра.
+
+Официальная спецификация S2E указывает Ethernet UDP как интерфейс связи; в SDK для Ethernet-устройств используется `createUdpChannel(ip, port)`.
+
+Сначала клонируйте SDK рядом с проектом:
+
+```cmd
+cd /d C:\dev
+git clone https://github.com/Slamtec/rplidar_sdk.git
+```
+
+Для CEF/MSVC-сборки:
+
+```cmd
+cd /d C:\dev\yadro
+rmdir /s /q build-cef
+
+set "CEF_ROOT=C:\dev\cef_binary_150.0.10+g8042e43+chromium-150.0.7871.101_windows64"
+set "RPLIDAR_SDK_ROOT=C:\dev\rplidar_sdk"
+
+cmake -S . -B build-cef -G Ninja ^
+  -DCMAKE_BUILD_TYPE=Release ^
+  -DYADRO_WITH_CEF=ON ^
+  -DCEF_ROOT="%CEF_ROOT%" ^
+  -DYADRO_WITH_RPLIDAR_S2E=ON ^
+  -DRPLIDAR_SDK_ROOT="%RPLIDAR_SDK_ROOT%"
+
+cmake --build build-cef --target remotion -j 8
+```
+
+После запуска откройте:
+
+```text
+Настройки → Внешние устройства → RPLIDAR S2E
+или
+Процедуры → Режим по лидару
+```
+
+В настройках S2E задаются фактические IP/UDP-порт устройства, реальные длина и ширина полотна, положение/угол установки лидара и зоны безопасности. Значения размеров полотна намеренно не зашиты в код.
+
+API:
+
+```text
+GET  /api/v1/lidar/status
+POST /api/v1/lidar/start
+POST /api/v1/lidar/stop
+POST /api/v1/settings        (секция lidar)
+```
+
+Модуль выполняет преобразование полярного скана в координаты полотна, фильтрацию рабочей зоны, кластеризацию точек стоп, отслеживание левой/правой ноги, расчёт текущего/предыдущего шага, временного цикла, Ct/Cx/Cy и контроль ограничительной зоны. Прогнозирование использует последние измерения и горизонт, заданный числом шагов.
+
+> Автоматическая передача рекомендаций скорости в реальную САУ полотна пока не включена. API выдаёт `recommended_speed_delta_kmh`, но `actuation_applied=false`. Перед замыканием этого контура требуется аппаратная валидация на конкретной дорожке и отдельная проверка физической цепи аварийной остановки.
+
 ## Linux
 
 ```bash
@@ -109,6 +164,7 @@ src/
   treadmill.*         state machine, safety, session engine, hardware abstraction
   protocols.*         verified standard protocols
   web_server.*        REST + static files
+  rplidar_s2e.*       RPLIDAR S2E Ethernet/UDP, стопы, шаг и зона безопасности
   main.cpp             core/server startup
   remotion_shell.cpp   optional CEF Chromium desktop shell
 
@@ -132,6 +188,8 @@ data/
 - `GET/POST/DELETE /api/v1/profiles`
 - `GET/POST /api/v1/patients`
 - `POST /api/v1/simulation/heart-rate`
+- `GET /api/v1/lidar/status`
+- `POST /api/v1/lidar/start`, `POST /api/v1/lidar/stop`
 
 ## Следующий аппаратный этап
 
