@@ -202,16 +202,17 @@ public:
                                        CefRefPtr<CefCommandLine> command_line) override {
         (void)process_type;
 
-        // REMOTION uses Three.js/WebGL in several procedure screens.  Some
-        // Windows/CEF installations end up with GPU acceleration or WebGL
-        // blacklisted even though the same machine renders correctly in the
-        // system browser.  Explicitly keep Chromium's GPU/WebGL path enabled
-        // and prefer ANGLE/D3D11 for the CEF shell.
-        command_line->AppendSwitch("enable-gpu");
+        // REMOTION uses Three.js/WebGL.  On some Windows/CEF installations
+        // the hardware ANGLE/D3D11 path can produce a black or completely
+        // white browser surface although the system browser works normally.
+        //
+        // Use Chromium's explicit SwiftShader WebGL path for the embedded
+        // shell.  This is slower than the hardware GPU but much more
+        // deterministic for the local trusted REMOTION UI.
         command_line->AppendSwitch("enable-webgl");
-        command_line->AppendSwitch("ignore-gpu-blocklist");
-        command_line->AppendSwitch("enable-gpu-rasterization");
-        command_line->AppendSwitchWithValue("use-angle", "d3d11");
+        command_line->AppendSwitch("enable-unsafe-swiftshader");
+        command_line->AppendSwitchWithValue("use-gl", "angle");
+        command_line->AppendSwitchWithValue("use-angle", "swiftshader-webgl");
     }
 
     void Configure(std::string start_url, int port, bool fullscreen) {
