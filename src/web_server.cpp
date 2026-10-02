@@ -285,6 +285,24 @@ void WebServer::register_routes() {
             {"telemetry", lidar_telemetry_json()}
         });
     });
+    server_.Get("/api/v1/lidar/points", [&](const httplib::Request&, httplib::Response& res) {
+        const auto points = lidar_.point_snapshot();
+        const auto t = lidar_.snapshot();
+        json items = json::array();
+        for (const auto& p : points) {
+            items.push_back({
+                {"angle_deg", p.angle_deg},
+                {"distance_m", p.distance_m},
+                {"quality", p.quality}
+            });
+        }
+        json_response(res, 200, {
+            {"ok", true},
+            {"scan_sequence", t.scan_sequence},
+            {"scan_age_ms", t.scan_age_ms},
+            {"points", std::move(items)}
+        });
+    });
     server_.Post("/api/v1/lidar/start", [&](const httplib::Request&, httplib::Response& res) {
         const bool started = lidar_.start();
         json_response(res, started ? 200 : 409, {
