@@ -153,6 +153,14 @@ if(YADRO_WITH_RPLIDAR_S2E)
         "${RPLIDAR_SDK_ROOT}/sdk/src/dataunpacker/unpacker")
     target_compile_definitions(rplidar_sdk PRIVATE _USE_MATH_DEFINES)
 
+    if(MSVC)
+        # CEF's target properties build the desktop shell with the static MSVC
+        # runtime (/MT, /MTd). Build the SLAMTEC SDK with the same runtime or
+        # the final link fails with LNK2038 RuntimeLibrary MD vs MT.
+        set_property(TARGET rplidar_sdk PROPERTY
+            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
+
     if(WIN32)
         # The upstream SDK's legacy HAL checks WIN32/WIN64 instead of MSVC's
         # native _WIN32/_WIN64 macros in hal/types.h.
