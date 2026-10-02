@@ -285,6 +285,12 @@ double RplidarS2E::symmetry(double right, double left) {
     return ((right - left) / denom) * 100.0;
 }
 
+double RplidarS2E::symmetry_score(double right, double left) {
+    if (right <= 0.0 || left <= 0.0) return 0.0;
+    const double index = std::abs(symmetry(right, left));
+    return std::clamp(100.0 - index, 0.0, 100.0);
+}
+
 void RplidarS2E::update_metrics() {
     telemetry_.current_step_left_cm = left_track_.current_step_cm;
     telemetry_.current_step_right_cm = right_track_.current_step_cm;
@@ -299,6 +305,10 @@ void RplidarS2E::update_metrics() {
         symmetry(average(right_track_.step_x_history), average(left_track_.step_x_history));
     telemetry_.symmetry_y_percent =
         symmetry(average(right_track_.step_y_history), average(left_track_.step_y_history));
+    telemetry_.longitudinal_symmetry_percent =
+        symmetry_score(average(right_track_.step_x_history), average(left_track_.step_x_history));
+    telemetry_.transverse_symmetry_percent =
+        symmetry_score(average(right_track_.step_y_history), average(left_track_.step_y_history));
 
     telemetry_.metrics_valid =
         !left_track_.cycle_history.empty() &&
