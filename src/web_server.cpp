@@ -74,7 +74,14 @@ WebServer::WebServer(TreadmillController& controller,
     const auto settings = load_settings();
     active_patient_id_ = settings.value("active_patient_id", "");
     apply_runtime_settings(settings);
+    const auto lidar_config = lidar_config_from_settings(settings);
+    lidar_.configure(lidar_config);
+    if (lidar_config.enabled) lidar_.start();
     register_routes();
+}
+
+WebServer::~WebServer() {
+    lidar_.stop();
 }
 
 bool WebServer::listen(const std::string& bind_address, int port) {
@@ -87,7 +94,10 @@ bool WebServer::listen(const std::string& bind_address, int port) {
     return server_.listen(bind_address, port);
 }
 
-void WebServer::stop() { server_.stop(); }
+void WebServer::stop() {
+    server_.stop();
+    lidar_.stop();
+}
 
 void WebServer::register_routes() {
     server_.Get("/api/v1/health", [&](const httplib::Request&, httplib::Response& res) {
@@ -267,14 +277,39 @@ void WebServer::register_routes() {
     server_.Get("/api/v1/settings", [&](const httplib::Request&, httplib::Response& res) {
         json_response(res, 200, {{"ok", true}, {"settings", load_settings()}});
     });
+
+    server_.Get("/api/v1/lidar/status", [&](const httplib::Request&, httplib::Response& res) {
+        json_response(res, 200, {
+            {"ok", true},
+            {"config", lidar_config_json(lidar_.config())},
+            {"telemetry", lidar_telemetry_json()}
+        });
+    });
+    server_.Post("/api/v1/lidar/start", [&](const httplib::Request&, httplib::Response& res) {
+        const bool started = lidar_.start();
+        json_response(res, started ? 200 : 409, {
+            {"ok", started},
+            {"message", started ? "RPLIDAR S2E запущен" : lidar_.snapshot().error},
+            {"telemetry", lidar_telemetry_json()}
+        });
+    });
+    server_.Post("/api/v1/lidar/stop", [&](const httplib::Request&, httplib::Response& res) {
+        lidar_.stop();
+        json_response(res, 200, {{"ok", true}, {"telemetry", lidar_telemetry_json()}});
+    });
     server_.Post("/api/v1/settings", [&](const httplib::Request& req, httplib::Response& res) {
         try {
             const auto patch = json::parse(req.body); auto settings = load_settings(); settings.merge_patch(patch);
             if (patch.contains("limits") || patch.contains("motion")) {
                 const auto result = apply_runtime_settings(settings); if (!result.ok) { json_response(res, 400, command_json(result)); return; }
             }
+            if (patch.contains("lidar")) {
+                const auto cfg = lidar_config_from_settings(settings);
+                lidar_.configure(cfg);
+                if (cfg.enabled) lidar_.start(); else lidar_.stop();
+            }
             save_settings(settings); set_active_patient(settings.value("active_patient_id", active_patient()));
-            json_response(res, 200, {{"ok", true}, {"settings", settings}});
+            json_response(res, 200, {{"ok", true}, {"settings", settings}, {"lidar", lidar_telemetry_json()}});
         } catch (const std::exception& e) { json_response(res, 400, {{"ok", false}, {"message", e.what()}}); }
     });
 
@@ -401,7 +436,16 @@ json WebServer::default_settings() const {
         {"motion", {{"acceleration_times_seconds", json::array({64.0,48.0,32.0,16.0,12.0,8.0,4.0})}, {"braking_times_seconds", json::array({64.0,48.0,32.0,16.0,12.0,8.0,4.0})}, {"acceleration_level", 4}, {"braking_level", 4}}},
         {"calibration", {{"incline_zero_offset_percent", 0.0}}}, {"units", {{"distance", "km"}, {"speed", "kmh"}, {"angle", "percent"}, {"energy", "kcal"}, {"power", "kw"}, {"aerobic", "ml_min_kg"}}},
         {"ui", {{"font_scale", 1.0}, {"high_contrast", false}, {"compact", false}}}, {"security", {{"pin_required", false}, {"operator_pin_sha256", ""}}},
-        {"heart_rate_sensor", {{"connected", false}, {"id", ""}, {"name", ""}, {"simulated", true}}}};
+        {"heart_rate_sensor", {{"connected", false}, {"id", ""}, {"name", ""}, {"simulated", true}}},
+        {"lidar", {
+            {"enabled", false}, {"ip", ""}, {"udp_port", 0},
+            {"belt_length_m", 0.0}, {"belt_width_m", 0.0},
+            {"sensor_x_m", 0.0}, {"sensor_y_m", 0.0}, {"sensor_yaw_deg", 0.0},
+            {"front_margin_m", 0.30}, {"rear_margin_m", 0.30}, {"side_margin_m", 0.10},
+            {"prediction_steps", 5}, {"cluster_link_m", 0.12}, {"min_cluster_points", 3},
+            {"scan_timeout_ms", 500}, {"target_step_length_m", 0.0},
+            {"speed_correction_step_kmh", 0.2}, {"actuation_enabled", false}
+        }}};
 }
 json WebServer::load_settings() const {
     std::lock_guard lock(storage_mutex_); auto settings = read_json_file(settings_file_, default_settings()); if (!settings.is_object()) settings = default_settings(); auto defaults = default_settings(); defaults.merge_patch(settings); return defaults;
@@ -413,6 +457,72 @@ CommandResult WebServer::apply_runtime_settings(const json& settings) {
     const auto motion = settings.value("motion", json::object()); const int a = std::clamp(motion.value("acceleration_level", 4), 1, 7) - 1; const int b = std::clamp(motion.value("braking_level", 4), 1, 7) - 1;
     const double at = std::max(1.0, array_number(motion.value("acceleration_times_seconds", json::array()), a, 16.0)); const double bt = std::max(1.0, array_number(motion.value("braking_times_seconds", json::array()), b, 16.0));
     limits.max_accel_kmh_per_s = 10.0 / at; limits.max_decel_kmh_per_s = 10.0 / bt; return controller_.update_limits(limits);
+}
+
+RplidarS2EConfig WebServer::lidar_config_from_settings(const json& settings) const {
+    const auto value = settings.value("lidar", json::object());
+    RplidarS2EConfig cfg;
+    cfg.enabled = value.value("enabled", false);
+    cfg.ip = value.value("ip", "");
+    cfg.udp_port = value.value("udp_port", 0);
+    cfg.belt_length_m = value.value("belt_length_m", 0.0);
+    cfg.belt_width_m = value.value("belt_width_m", 0.0);
+    cfg.sensor_x_m = value.value("sensor_x_m", 0.0);
+    cfg.sensor_y_m = value.value("sensor_y_m", 0.0);
+    cfg.sensor_yaw_deg = value.value("sensor_yaw_deg", 0.0);
+    cfg.front_margin_m = value.value("front_margin_m", 0.30);
+    cfg.rear_margin_m = value.value("rear_margin_m", 0.30);
+    cfg.side_margin_m = value.value("side_margin_m", 0.10);
+    cfg.prediction_steps = std::clamp(value.value("prediction_steps", 5), 1, 20);
+    cfg.cluster_link_m = std::clamp(value.value("cluster_link_m", 0.12), 0.03, 0.50);
+    cfg.min_cluster_points = std::clamp(value.value("min_cluster_points", 3), 1, 100);
+    cfg.scan_timeout_ms = std::clamp(value.value("scan_timeout_ms", 500), 50, 5000);
+    cfg.target_step_length_m = std::max(0.0, value.value("target_step_length_m", 0.0));
+    cfg.speed_correction_step_kmh = std::clamp(value.value("speed_correction_step_kmh", 0.2), 0.05, 2.0);
+    cfg.actuation_enabled = value.value("actuation_enabled", false);
+    return cfg;
+}
+
+json WebServer::lidar_config_json(const RplidarS2EConfig& c) const {
+    return {
+        {"enabled", c.enabled}, {"ip", c.ip}, {"udp_port", c.udp_port},
+        {"belt_length_m", c.belt_length_m}, {"belt_width_m", c.belt_width_m},
+        {"sensor_x_m", c.sensor_x_m}, {"sensor_y_m", c.sensor_y_m}, {"sensor_yaw_deg", c.sensor_yaw_deg},
+        {"front_margin_m", c.front_margin_m}, {"rear_margin_m", c.rear_margin_m}, {"side_margin_m", c.side_margin_m},
+        {"prediction_steps", c.prediction_steps}, {"cluster_link_m", c.cluster_link_m},
+        {"min_cluster_points", c.min_cluster_points}, {"scan_timeout_ms", c.scan_timeout_ms},
+        {"target_step_length_m", c.target_step_length_m},
+        {"speed_correction_step_kmh", c.speed_correction_step_kmh},
+        {"actuation_enabled", c.actuation_enabled}
+    };
+}
+
+json WebServer::lidar_telemetry_json() const {
+    const auto t = lidar_.snapshot();
+    auto foot = [](const FootObservation& f) {
+        return json{{"valid", f.valid}, {"x_m", f.x_m}, {"y_m", f.y_m}, {"point_count", f.point_count}};
+    };
+    return {
+        {"sdk_available", t.sdk_available}, {"running", t.running}, {"connected", t.connected},
+        {"scanning", t.scanning}, {"device_model", t.device_model},
+        {"serial_number", t.serial_number}, {"firmware", t.firmware},
+        {"health", t.health}, {"error", t.error},
+        {"scan_sequence", t.scan_sequence}, {"raw_point_count", t.raw_point_count},
+        {"filtered_point_count", t.filtered_point_count}, {"scan_age_ms", t.scan_age_ms},
+        {"left", foot(t.left)}, {"right", foot(t.right)},
+        {"current_step_left_cm", t.current_step_left_cm},
+        {"current_step_right_cm", t.current_step_right_cm},
+        {"previous_step_left_cm", t.previous_step_left_cm},
+        {"previous_step_right_cm", t.previous_step_right_cm},
+        {"cycle_left_s", t.cycle_left_s}, {"cycle_right_s", t.cycle_right_s},
+        {"symmetry_time_percent", t.symmetry_time_percent},
+        {"symmetry_x_percent", t.symmetry_x_percent},
+        {"symmetry_y_percent", t.symmetry_y_percent},
+        {"safety_state", t.safety_state}, {"safety_reason", t.safety_reason},
+        {"geometry_configured", t.geometry_configured}, {"metrics_valid", t.metrics_valid},
+        {"recommended_speed_delta_kmh", t.recommended_speed_delta_kmh},
+        {"actuation_applied", false}
+    };
 }
 
 std::string WebServer::active_patient() const { std::lock_guard lock(session_mutex_); return active_patient_id_; }
