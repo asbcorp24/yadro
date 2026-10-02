@@ -29,11 +29,13 @@
 <div class="section-title"><div><h2>RPLIDAR S2E · рабочий режим</h2><div class="muted">Параметры подключения и геометрия задаются один раз в разделе «Настройки → Внешние устройства → RPLIDAR S2E».</div></div><span id="connection" class="status">Ожидание</span></div>
 <div class="metric-grid">
 <div class="metric"><div class="label">IP / UDP</div><div id="endpoint" class="value" style="font-size:1.05rem">—</div></div>
+<div class="metric"><div class="label">Ethernet/UDP</div><div id="networkState" class="value" style="font-size:1.05rem">—</div></div>
 <div class="metric"><div class="label">Сканирование</div><div id="scanState" class="value" style="font-size:1.05rem">—</div></div>
 <div class="metric"><div class="label">Health</div><div id="healthState" class="value" style="font-size:1.05rem">—</div></div>
 <div class="metric"><div class="label">Геометрия полотна</div><div id="geometryState" class="value" style="font-size:1.05rem">—</div></div>
 </div>
 <div class="toolbar" style="margin-top:16px">
+<button id="restartScan" class="btn primary">Перезапустить сканирование</button>
 <a class="btn" href="lidar-settings.html">Настройки подключения</a>
 </div>
 <div id="sdkNotice" class="notice">Проверка RPLIDAR S2E…</div>
@@ -88,17 +90,18 @@ function drawGeometry(c){
 }
 function render(t,c){
  currentConfig=c||currentConfig;
- $('connection').textContent=t.connected&&t.scanning?'Подключен':t.running?'Подключение…':'Отключен';
+ $('connection').textContent=t.connected&&t.scanning?'Работает':t.connected?'Связь есть, скан нет':t.running?'Подключение…':'Отключен';
  $('connection').className='status '+(t.connected&&t.scanning?'running':t.error?'fault':'');
  $('endpoint').textContent=currentConfig?.ip?(currentConfig.ip+':'+(currentConfig.udp_port||'—')):'Не настроено';
- $('scanState').textContent=t.scanning?'Идёт':'Нет';
+ $('networkState').textContent=t.connected?'Связь есть':'Нет связи';
+ $('scanState').textContent=t.scanning?'Идёт':'Не запущено';
  $('healthState').textContent=t.health||'—';
  $('geometryState').textContent=t.geometry_configured?'Настроена':'Не настроена';
  $('sdkNotice').className=t.sdk_available?(t.error?'dangerbox':'okbox'):'notice';
  $('sdkNotice').textContent=t.sdk_available?(t.error||('SLAMTEC SDK доступен · '+(t.serial_number||'ожидание устройства')):'Эта сборка создана без SLAMTEC SDK. Пересоберите с YADRO_WITH_RPLIDAR_S2E=ON.';
  $('safety').className='safety-banner '+(t.safety_state||'not_configured');
  $('safety').textContent=(t.safety_state||'not_configured').toUpperCase()+' · '+(t.safety_reason||'нет данных');
- $('scanInfo').textContent='Сканов: '+(t.scan_sequence||0)+' · точек: '+(t.filtered_point_count||0)+' · возраст: '+(t.scan_age_ms>=0?t.scan_age_ms.toFixed(0)+' мс':'—');
+ $('scanInfo').textContent='Сканов: '+(t.scan_sequence||0)+' · сырых точек: '+(t.raw_point_count||0)+' · после фильтра: '+(t.filtered_point_count||0)+' · возраст: '+(t.scan_age_ms>=0?t.scan_age_ms.toFixed(0)+' мс':'—');
  const valid=!!t.metrics_valid;
  $('stepL').textContent=valid?valueOrDash(t.current_step_left_cm):'—';$('stepR').textContent=valid?valueOrDash(t.current_step_right_cm):'—';
  $('prevL').textContent=valid?valueOrDash(t.previous_step_left_cm):'—';$('prevR').textContent=valid?valueOrDash(t.previous_step_right_cm):'—';
@@ -107,7 +110,18 @@ function render(t,c){
  $('speedDelta').textContent=valid?(Number(t.recommended_speed_delta_kmh)>=0?'+':'')+Number(t.recommended_speed_delta_kmh).toFixed(2):'—';
  drawGeometry(currentConfig);drawFoot('leftFoot',t.left,currentConfig);drawFoot('rightFoot',t.right,currentConfig);
 }
-async function status(){try{const j=await api('/api/v1/lidar/status');render(j.telemetry,j.config)}catch(e){$('sdkNotice').className='dangerbox';$('sdkNotice').textContent=e.message}}
+let autoStartTried=false;
+async function status(){
+ try{
+  const j=await api('/api/v1/lidar/status');
+  render(j.telemetry,j.config);
+  if(!autoStartTried && j.config?.enabled && (!j.telemetry.running || !j.telemetry.scanning)){
+   autoStartTried=true;
+   try{await api('/api/v1/lidar/start','POST',{})}catch(e){$('sdkNotice').className='dangerbox';$('sdkNotice').textContent=e.message}
+  }
+ }catch(e){$('sdkNotice').className='dangerbox';$('sdkNotice').textContent=e.message}
+}
+$('restartScan').onclick=async()=>{try{await api('/api/v1/lidar/stop','POST',{});await api('/api/v1/lidar/start','POST',{});toast('Сканирование RPLIDAR перезапущено')}catch(e){alert(e.message)}await status()};
 status();setInterval(status,250);
 </script>
 </body></html>
