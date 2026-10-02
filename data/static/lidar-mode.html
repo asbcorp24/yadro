@@ -98,7 +98,7 @@ function render(t,c){
  $('healthState').textContent=t.health||'—';
  $('geometryState').textContent=t.geometry_configured?'Настроена':'Не настроена';
  $('sdkNotice').className=t.sdk_available?(t.error?'dangerbox':'okbox'):'notice';
- $('sdkNotice').textContent=t.sdk_available?(t.error||('SLAMTEC SDK доступен · '+(t.serial_number||'ожидание устройства')):'Эта сборка создана без SLAMTEC SDK. Пересоберите с YADRO_WITH_RPLIDAR_S2E=ON.';
+ $('sdkNotice').textContent=t.sdk_available?(t.error||('SLAMTEC SDK доступен · '+(t.serial_number||'ожидание устройства'))):'Эта сборка создана без SLAMTEC SDK. Пересоберите с YADRO_WITH_RPLIDAR_S2E=ON.';
  $('safety').className='safety-banner '+(t.safety_state||'not_configured');
  $('safety').textContent=(t.safety_state||'not_configured').toUpperCase()+' · '+(t.safety_reason||'нет данных');
  $('scanInfo').textContent='Сканов: '+(t.scan_sequence||0)+' · сырых точек: '+(t.raw_point_count||0)+' · после фильтра: '+(t.filtered_point_count||0)+' · возраст: '+(t.scan_age_ms>=0?t.scan_age_ms.toFixed(0)+' мс':'—');
