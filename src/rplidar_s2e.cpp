@@ -126,6 +126,11 @@ RplidarS2ETelemetry RplidarS2E::snapshot() const {
     return result;
 }
 
+std::vector<RplidarPoint> RplidarS2E::point_snapshot() const {
+    std::lock_guard lock(mutex_);
+    return latest_points_;
+}
+
 std::vector<RplidarS2E::Cluster> RplidarS2E::clusters_from_scan(
     const std::vector<RplidarPoint>& points,
     std::size_t& filtered_count) const {
@@ -367,6 +372,8 @@ void RplidarS2E::process_scan(const std::vector<RplidarPoint>& points) {
     std::lock_guard lock(mutex_);
     telemetry_.raw_point_count = points.size();
     telemetry_.filtered_point_count = filtered;
+    latest_points_ = points;
+    if (latest_points_.size() > 12000) latest_points_.resize(12000);
     ++telemetry_.scan_sequence;
     last_scan_ = now;
 
