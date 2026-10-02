@@ -1,6 +1,7 @@
 #pragma once
 
 #include "treadmill.hpp"
+#include "rplidar_s2e.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -18,6 +19,7 @@ public:
     WebServer(TreadmillController& controller,
               std::filesystem::path data_dir,
               std::filesystem::path static_dir);
+    ~WebServer();
 
     bool listen(const std::string& bind_address, int port);
     void stop();
@@ -57,6 +59,9 @@ private:
     nlohmann::json load_settings() const;
     void save_settings(const nlohmann::json& settings) const;
     CommandResult apply_runtime_settings(const nlohmann::json& settings);
+    RplidarS2EConfig lidar_config_from_settings(const nlohmann::json& settings) const;
+    nlohmann::json lidar_config_json(const RplidarS2EConfig& config) const;
+    nlohmann::json lidar_telemetry_json() const;
 
     void update_session_tracking(const Telemetry& telemetry);
     void begin_session_tracking(const Telemetry& telemetry);
@@ -65,6 +70,7 @@ private:
     void set_active_patient(std::string patient_id);
 
     TreadmillController& controller_;
+    RplidarS2E lidar_;
     std::filesystem::path data_dir_;
     std::filesystem::path static_dir_;
     std::filesystem::path profiles_file_;
