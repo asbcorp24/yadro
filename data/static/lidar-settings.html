@@ -104,7 +104,7 @@ function payload(){
 }
 function render(t){
  $('sdk').textContent=t.sdk_available?'Доступен':'Не включён в сборку';$('running').textContent=t.running?'Запущен':'Остановлен';
- $('connected').textContent=t.connected?'Связь есть':'Нет связи';$('scanning').textContent=t.scanning?'Идёт':'Нет';
+ $('connected').textContent=t.connected?'Связь с устройством есть':'Нет связи';$('scanning').textContent=t.scanning?'Идёт — данные поступают':'Не запущено / данных нет';
  $('model').textContent=t.device_model||'RPLIDAR S2E';$('serial').textContent=t.serial_number||'—';$('firmware').textContent=t.firmware||'—';
  $('health').textContent=t.health||'—';$('scanAge').textContent=t.scan_age_ms>=0?t.scan_age_ms.toFixed(0)+' мс':'—';$('error').textContent=t.error||'—';
 }
