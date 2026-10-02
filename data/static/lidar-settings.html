@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>REMOTION — настройки RPLIDAR S2E</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.lidar-settings{display:grid;grid-template-columns:minmax(420px,1fr) minmax(360px,.8fr);gap:18px}
+.form-grid.compact-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+.status-card{padding:18px;border:1px solid var(--line);border-radius:16px;background:color-mix(in srgb,var(--panel) 92%,black 8%)}
+.status-row{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line)}
+.status-row:last-child{border-bottom:0}
+@media(max-width:900px){.lidar-settings{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="topbar"><a class="back" href="external-devices.html">← Назад</a><div class="crumb">Настройки · RPLIDAR S2E (S2M1-R2E)</div></header>
+<main class="content">
+<div class="lidar-settings">
+<section class="panel">
+<div class="section-title"><div><h2>Подключение лидара</h2><div class="muted">SLAMTEC RPLIDAR S2E (S2M1-R2E) · Ethernet / UDP</div></div></div>
+<div class="form-grid compact-grid">
+<div class="field"><label>Использовать модуль</label><select id="enabled"><option value="false">Нет</option><option value="true">Да</option></select></div>
+<div class="field"><label>IP-адрес лидара</label><input id="ip" placeholder="192.168.x.x"></div>
+<div class="field"><label>UDP-порт</label><input id="port" type="number" min="1" max="65535" placeholder="порт S2E"></div>
+<div class="field"><label>Таймаут скана, мс</label><input id="timeout" type="number" min="50" max="5000"></div>
+</div>
+
+<h3 style="margin-top:22px">Положение лидара и геометрия полотна</h3>
+<div class="form-grid compact-grid">
+<div class="field"><label>Длина полотна, см</label><input id="beltLength" type="number" min="1" step="0.1"></div>
+<div class="field"><label>Ширина полотна, см</label><input id="beltWidth" type="number" min="1" step="0.1"></div>
+<div class="field"><label>Лидар X, см</label><input id="sensorX" type="number" step="0.1"></div>
+<div class="field"><label>Лидар Y, см</label><input id="sensorY" type="number" step="0.1"></div>
+<div class="field"><label>Поворот лидара, °</label><input id="sensorYaw" type="number" step="0.1"></div>
+</div>
+
+<h3 style="margin-top:22px">Зоны безопасности</h3>
+<div class="form-grid compact-grid">
+<div class="field"><label>Спереди, см</label><input id="frontMargin" type="number" min="0" step="1"></div>
+<div class="field"><label>Сзади, см</label><input id="rearMargin" type="number" min="0" step="1"></div>
+<div class="field"><label>Справа/слева, см</label><input id="sideMargin" type="number" min="0" step="1"></div>
+<div class="field"><label>Прогноз, шагов</label><input id="predictionSteps" type="number" min="1" max="20"></div>
+</div>
+
+<h3 style="margin-top:22px">Обработка скана</h3>
+<div class="form-grid compact-grid">
+<div class="field"><label>Связность кластера, см</label><input id="clusterLink" type="number" min="3" max="50" step="1"></div>
+<div class="field"><label>Мин. точек в кластере</label><input id="minClusterPoints" type="number" min="1" max="100"></div>
+<div class="field"><label>Целевая длина шага, см</label><input id="targetStep" type="number" min="0" step="1"></div>
+<div class="field"><label>Шаг коррекции скорости, км/ч</label><input id="speedStep" type="number" min="0.05" max="2" step="0.05"></div>
+</div>
+
+<div class="toolbar" style="margin-top:20px">
+<button id="save" class="btn success">Сохранить настройки</button>
+<button id="connect" class="btn primary">Подключить</button>
+<button id="disconnect" class="btn danger">Отключить</button>
+<a class="btn" href="lidar-mode.html">Открыть режим по лидару</a>
+</div>
+<div class="notice" style="margin-top:18px">Автоматическое управление скоростью полотна по лидару пока не включается отсюда. Сначала требуется проверка геометрии, направления осей и поведения на реальной дорожке.</div>
+</section>
+
+<section class="panel">
+<h2>Состояние подключения</h2>
+<div id="summary" class="status-card">
+<div class="status-row"><span>SDK</span><strong id="sdk">—</strong></div>
+<div class="status-row"><span>Модуль</span><strong id="running">—</strong></div>
+<div class="status-row"><span>Ethernet/UDP</span><strong id="connected">—</strong></div>
+<div class="status-row"><span>Сканирование</span><strong id="scanning">—</strong></div>
+<div class="status-row"><span>Модель</span><strong id="model">RPLIDAR S2E</strong></div>
+<div class="status-row"><span>Серийный номер</span><strong id="serial">—</strong></div>
+<div class="status-row"><span>Прошивка</span><strong id="firmware">—</strong></div>
+<div class="status-row"><span>Health</span><strong id="health">—</strong></div>
+<div class="status-row"><span>Последний скан</span><strong id="scanAge">—</strong></div>
+<div class="status-row"><span>Ошибка</span><strong id="error">—</strong></div>
+</div>
+</section>
+</div>
+</main>
+</div>
+<script src="app.js"></script>
+<script>
+const m=v=>Number(v||0)/100, cm=v=>Number(v||0)*100;
+function fill(c){
+ $('enabled').value=String(!!c.enabled);$('ip').value=c.ip||'';$('port').value=c.udp_port||'';
+ $('timeout').value=c.scan_timeout_ms||500;$('beltLength').value=cm(c.belt_length_m)||'';$('beltWidth').value=cm(c.belt_width_m)||'';
+ $('sensorX').value=cm(c.sensor_x_m);$('sensorY').value=cm(c.sensor_y_m);$('sensorYaw').value=c.sensor_yaw_deg||0;
+ $('frontMargin').value=cm(c.front_margin_m);$('rearMargin').value=cm(c.rear_margin_m);$('sideMargin').value=cm(c.side_margin_m);
+ $('predictionSteps').value=c.prediction_steps||5;$('clusterLink').value=cm(c.cluster_link_m)||12;$('minClusterPoints').value=c.min_cluster_points||3;
+ $('targetStep').value=cm(c.target_step_length_m)||0;$('speedStep').value=c.speed_correction_step_kmh||.2;
+}
+function payload(){
+ return {lidar:{
+  enabled:$('enabled').value==='true',ip:$('ip').value.trim(),udp_port:Number($('port').value||0),
+  scan_timeout_ms:Number($('timeout').value||500),belt_length_m:m($('beltLength').value),belt_width_m:m($('beltWidth').value),
+  sensor_x_m:m($('sensorX').value),sensor_y_m:m($('sensorY').value),sensor_yaw_deg:Number($('sensorYaw').value||0),
+  front_margin_m:m($('frontMargin').value),rear_margin_m:m($('rearMargin').value),side_margin_m:m($('sideMargin').value),
+  prediction_steps:Number($('predictionSteps').value||5),cluster_link_m:m($('clusterLink').value),
+  min_cluster_points:Number($('minClusterPoints').value||3),target_step_length_m:m($('targetStep').value),
+  speed_correction_step_kmh:Number($('speedStep').value||.2),actuation_enabled:false
+ }};
+}
+function render(t){
+ $('sdk').textContent=t.sdk_available?'Доступен':'Не включён в сборку';$('running').textContent=t.running?'Запущен':'Остановлен';
+ $('connected').textContent=t.connected?'Связь есть':'Нет связи';$('scanning').textContent=t.scanning?'Идёт':'Нет';
+ $('model').textContent=t.device_model||'RPLIDAR S2E';$('serial').textContent=t.serial_number||'—';$('firmware').textContent=t.firmware||'—';
+ $('health').textContent=t.health||'—';$('scanAge').textContent=t.scan_age_ms>=0?t.scan_age_ms.toFixed(0)+' мс':'—';$('error').textContent=t.error||'—';
+}
+async function refresh(){try{const j=await api('/api/v1/lidar/status');render(j.telemetry);if(!window.__lidarFilled){fill(j.config);window.__lidarFilled=true}}catch(e){$('error').textContent=e.message}}
+$('save').onclick=async()=>{try{const j=await api('/api/v1/settings','POST',payload());fill(j.settings.lidar);toast('Настройки лидара сохранены')}catch(e){alert(e.message)}await refresh()};
+$('connect').onclick=async()=>{try{await api('/api/v1/settings','POST',payload());await api('/api/v1/lidar/start','POST',{});toast('Подключение RPLIDAR S2E запущено')}catch(e){alert(e.message)}await refresh()};
+$('disconnect').onclick=async()=>{try{await api('/api/v1/lidar/stop','POST',{});toast('RPLIDAR S2E отключён')}catch(e){alert(e.message)}await refresh()};
+refresh();setInterval(refresh,500);
+</script>
+</body>
+</html>
