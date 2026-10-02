@@ -112,21 +112,45 @@ if(YADRO_WITH_RPLIDAR_S2E)
             "-DRPLIDAR_SDK_ROOT=C:/dev/rplidar_sdk")
     endif()
 
-    file(GLOB_RECURSE RPLIDAR_SDK_SOURCES CONFIGURE_DEPENDS
-        "${RPLIDAR_SDK_ROOT}/sdk/src/*.cpp")
+    # Match the source set used by the official SDK Makefile. Do not compile
+    # legacy rplidar_driver.cpp together with sl_lidar_driver.cpp.
+    set(RPLIDAR_SDK_SOURCES
+        "${RPLIDAR_SDK_ROOT}/sdk/src/sl_lidar_driver.cpp"
+        "${RPLIDAR_SDK_ROOT}/sdk/src/hal/thread.cpp"
+        "${RPLIDAR_SDK_ROOT}/sdk/src/sl_crc.cpp"
+        "${RPLIDAR_SDK_ROOT}/sdk/src/sl_serial_channel.cpp"
+        "${RPLIDAR_SDK_ROOT}/sdk/src/sl_lidarprotocol_codec.cpp"
+        "${RPLIDAR_SDK_ROOT}/sdk/src/sl_async_transceiver.cpp"
+        "${RPLIDAR_SDK_ROOT}/sdk/src/sl_tcp_channel.cpp"
+        "${RPLIDAR_SDK_ROOT}/sdk/src/sl_udp_channel.cpp"
+    )
+    file(GLOB_RECURSE RPLIDAR_DATAUNPACKER_SOURCES CONFIGURE_DEPENDS
+        "${RPLIDAR_SDK_ROOT}/sdk/src/dataunpacker/*.cpp")
+    list(APPEND RPLIDAR_SDK_SOURCES ${RPLIDAR_DATAUNPACKER_SOURCES})
 
     if(WIN32)
-        list(FILTER RPLIDAR_SDK_SOURCES EXCLUDE REGEX "/arch/(linux|macOS)/")
+        list(APPEND RPLIDAR_SDK_SOURCES
+            "${RPLIDAR_SDK_ROOT}/sdk/src/arch/win32/net_serial.cpp"
+            "${RPLIDAR_SDK_ROOT}/sdk/src/arch/win32/net_socket.cpp"
+            "${RPLIDAR_SDK_ROOT}/sdk/src/arch/win32/timer.cpp")
     elseif(APPLE)
-        list(FILTER RPLIDAR_SDK_SOURCES EXCLUDE REGEX "/arch/(linux|win32)/")
+        list(APPEND RPLIDAR_SDK_SOURCES
+            "${RPLIDAR_SDK_ROOT}/sdk/src/arch/macOS/net_serial.cpp"
+            "${RPLIDAR_SDK_ROOT}/sdk/src/arch/macOS/net_socket.cpp"
+            "${RPLIDAR_SDK_ROOT}/sdk/src/arch/macOS/timer.cpp")
     else()
-        list(FILTER RPLIDAR_SDK_SOURCES EXCLUDE REGEX "/arch/(win32|macOS)/")
+        list(APPEND RPLIDAR_SDK_SOURCES
+            "${RPLIDAR_SDK_ROOT}/sdk/src/arch/linux/net_serial.cpp"
+            "${RPLIDAR_SDK_ROOT}/sdk/src/arch/linux/net_socket.cpp"
+            "${RPLIDAR_SDK_ROOT}/sdk/src/arch/linux/timer.cpp")
     endif()
 
     add_library(rplidar_sdk STATIC ${RPLIDAR_SDK_SOURCES})
     target_include_directories(rplidar_sdk PUBLIC
         "${RPLIDAR_SDK_ROOT}/sdk/include"
-        "${RPLIDAR_SDK_ROOT}/sdk/src")
+        "${RPLIDAR_SDK_ROOT}/sdk/src"
+        "${RPLIDAR_SDK_ROOT}/sdk/src/dataunpacker"
+        "${RPLIDAR_SDK_ROOT}/sdk/src/dataunpacker/unpacker")
     target_compile_definitions(rplidar_sdk PRIVATE _USE_MATH_DEFINES)
 
     if(WIN32)
