@@ -198,6 +198,22 @@ class ShellApp final : public CefApp, public CefBrowserProcessHandler {
 public:
     CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override { return this; }
 
+    void OnBeforeCommandLineProcessing(const CefString& process_type,
+                                       CefRefPtr<CefCommandLine> command_line) override {
+        (void)process_type;
+
+        // REMOTION uses Three.js/WebGL in several procedure screens.  Some
+        // Windows/CEF installations end up with GPU acceleration or WebGL
+        // blacklisted even though the same machine renders correctly in the
+        // system browser.  Explicitly keep Chromium's GPU/WebGL path enabled
+        // and prefer ANGLE/D3D11 for the CEF shell.
+        command_line->AppendSwitch("enable-gpu");
+        command_line->AppendSwitch("enable-webgl");
+        command_line->AppendSwitch("ignore-gpu-blocklist");
+        command_line->AppendSwitch("enable-gpu-rasterization");
+        command_line->AppendSwitchWithValue("use-angle", "d3d11");
+    }
+
     void Configure(std::string start_url, int port, bool fullscreen) {
         start_url_ = std::move(start_url);
         port_ = port;
@@ -214,6 +230,7 @@ public:
         CefBrowserSettings browser_settings;
         browser_settings.javascript = STATE_ENABLED;
         browser_settings.webgl = STATE_ENABLED;
+        browser_settings.accelerated_2d_canvas = STATE_ENABLED;
 
         CefRefPtr<ShellClient> client = new ShellClient(port_, fullscreen_);
         if (!CefBrowserHost::CreateBrowser(window_info, client, start_url_, browser_settings, nullptr, nullptr)) {
