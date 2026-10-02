@@ -11,7 +11,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(YADRO_FETCH_DEPS "Download pinned header-only dependencies when system packages are unavailable" ON)
 option(YADRO_VENDOR_WEB_DEPS "Download pinned web dependencies into data/static/vendor for offline runtime" ON)
 option(YADRO_WITH_CEF "Build REMOTION fullscreen Chromium shell using a local CEF binary distribution" OFF)
+option(YADRO_WITH_RPLIDAR_S2E "Build RPLIDAR S2E Ethernet/UDP support using the SLAMTEC SDK" OFF)
 set(CEF_ROOT "" CACHE PATH "Path to an unpacked CEF binary distribution")
+set(RPLIDAR_SDK_ROOT "" CACHE PATH "Path to a cloned SLAMTEC rplidar_sdk repository")
 
 find_package(Threads REQUIRED)
 
@@ -98,8 +100,39 @@ endif()
 set(YADRO_CORE_SOURCES
     src/treadmill.cpp
     src/protocols.cpp
+    src/rplidar_s2e.cpp
     src/web_server.cpp
 )
+
+if(YADRO_WITH_RPLIDAR_S2E)
+    if(NOT RPLIDAR_SDK_ROOT OR NOT EXISTS "${RPLIDAR_SDK_ROOT}/sdk/include/sl_lidar.h")
+        message(FATAL_ERROR
+            "YADRO_WITH_RPLIDAR_S2E=ON requires RPLIDAR_SDK_ROOT to point to the "
+            "SLAMTEC rplidar_sdk repository. Example: "
+            "-DRPLIDAR_SDK_ROOT=C:/dev/rplidar_sdk")
+    endif()
+
+    file(GLOB_RECURSE RPLIDAR_SDK_SOURCES CONFIGURE_DEPENDS
+        "${RPLIDAR_SDK_ROOT}/sdk/src/*.cpp")
+
+    if(WIN32)
+        list(FILTER RPLIDAR_SDK_SOURCES EXCLUDE REGEX "/arch/(linux|macOS)/")
+    elseif(APPLE)
+        list(FILTER RPLIDAR_SDK_SOURCES EXCLUDE REGEX "/arch/(linux|win32)/")
+    else()
+        list(FILTER RPLIDAR_SDK_SOURCES EXCLUDE REGEX "/arch/(win32|macOS)/")
+    endif()
+
+    add_library(rplidar_sdk STATIC ${RPLIDAR_SDK_SOURCES})
+    target_include_directories(rplidar_sdk PUBLIC
+        "${RPLIDAR_SDK_ROOT}/sdk/include"
+        "${RPLIDAR_SDK_ROOT}/sdk/src")
+    target_compile_definitions(rplidar_sdk PRIVATE _USE_MATH_DEFINES)
+
+    if(WIN32)
+        target_link_libraries(rplidar_sdk PUBLIC ws2_32)
+    endif()
+endif()
 
 add_executable(yadro
     src/main.cpp
@@ -108,6 +141,10 @@ add_executable(yadro
 
 target_include_directories(yadro PRIVATE src)
 target_link_libraries(yadro PRIVATE Threads::Threads nlohmann_json::nlohmann_json httplib::httplib)
+if(YADRO_WITH_RPLIDAR_S2E)
+    target_compile_definitions(yadro PRIVATE YADRO_RPLIDAR_S2E_SDK=1)
+    target_link_libraries(yadro PRIVATE rplidar_sdk)
+endif()
 
 if(WIN32)
     target_link_libraries(yadro PRIVATE ws2_32)
@@ -159,6 +196,10 @@ if(YADRO_WITH_CEF)
         ${CEF_STANDARD_LIBS}
     )
     add_dependencies(remotion libcef_dll_wrapper)
+    if(YADRO_WITH_RPLIDAR_S2E)
+        target_compile_definitions(remotion PRIVATE YADRO_RPLIDAR_S2E_SDK=1)
+        target_link_libraries(remotion PRIVATE rplidar_sdk)
+    endif()
     SET_EXECUTABLE_TARGET_PROPERTIES(remotion)
 
     if(WIN32)
