@@ -123,6 +123,8 @@ private:
         double y_m{0.0};
         double previous_x_m{0.0};
         double previous_y_m{0.0};
+        double vx_m_s{0.0};
+        double vy_m_s{0.0};
         std::chrono::steady_clock::time_point last_seen{};
         std::chrono::steady_clock::time_point last_land{};
         double previous_step_cm{0.0};
