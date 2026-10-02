@@ -536,6 +536,8 @@ json WebServer::lidar_telemetry_json() const {
         {"symmetry_time_percent", t.symmetry_time_percent},
         {"symmetry_x_percent", t.symmetry_x_percent},
         {"symmetry_y_percent", t.symmetry_y_percent},
+        {"longitudinal_symmetry_percent", t.longitudinal_symmetry_percent},
+        {"transverse_symmetry_percent", t.transverse_symmetry_percent},
         {"safety_state", t.safety_state}, {"safety_reason", t.safety_reason},
         {"geometry_configured", t.geometry_configured}, {"metrics_valid", t.metrics_valid},
         {"recommended_speed_delta_kmh", t.recommended_speed_delta_kmh},
