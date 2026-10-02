@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>REMOTION — карта точек RPLIDAR S2E</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.map-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px}
+.lidar-map{position:relative;min-height:680px;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#071426}
+#map{width:100%;height:680px;display:block}
+.info-card{padding:16px;border:1px solid var(--line);border-radius:14px;background:color-mix(in srgb,var(--panel) 92%,black 8%)}
+.info-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
+.info-row:last-child{border-bottom:0}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;color:var(--muted)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+@media(max-width:950px){.map-layout{grid-template-columns:1fr}#map{height:520px}.lidar-map{min-height:520px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="topbar"><a class="back" href="lidar-settings.html">← Назад</a><div class="crumb">Настройки · RPLIDAR S2E · карта точек</div></header>
+<main class="content">
+<div class="map-layout">
+<section class="panel">
+<div class="section-title"><div><h2>Карта точек лидара</h2><div class="muted">Последний 360° скан RPLIDAR S2E (S2M1-R2E) в реальном времени.</div></div><span id="state" class="status">Ожидание</span></div>
+<div class="lidar-map"><canvas id="map"></canvas></div>
+<div class="legend"><span><i class="dot" style="background:#47b7ff"></i>точки скана</span><span><i class="dot" style="background:#2fe6a6"></i>лидар</span><span><i class="dot" style="background:#ffca54"></i>направление 0°</span></div>
+</section>
+<aside class="panel">
+<h2>Скан</h2>
+<div class="info-card">
+<div class="info-row"><span>IP / UDP</span><strong id="endpoint">—</strong></div>
+<div class="info-row"><span>Связь</span><strong id="connected">—</strong></div>
+<div class="info-row"><span>Сканирование</span><strong id="scanning">—</strong></div>
+<div class="info-row"><span>Номер скана</span><strong id="seq">0</strong></div>
+<div class="info-row"><span>Точек</span><strong id="pointCount">0</strong></div>
+<div class="info-row"><span>Возраст скана</span><strong id="age">—</strong></div>
+<div class="info-row"><span>Масштаб</span><strong id="scaleText">8 м</strong></div>
+</div>
+<div class="field" style="margin-top:16px"><label>Радиус карты, м</label><input id="range" type="range" min="2" max="40" value="8" step="1"></div>
+<div class="toolbar" style="margin-top:16px"><button id="restart" class="btn primary">Перезапустить сканирование</button></div>
+<div id="error" class="notice" style="margin-top:14px">Ожидание данных…</div>
+</aside>
+</div>
+</main>
+</div>
+<script src="app.js"></script>
+<script>
+const canvas=$('map'),ctx=canvas.getContext('2d');let latest=[],maxRange=8,lastSeq=0;
+function resize(){const r=canvas.getBoundingClientRect(),d=devicePixelRatio||1;canvas.width=Math.round(r.width*d);canvas.height=Math.round(r.height*d);ctx.setTransform(d,0,0,d,0,0);draw()}
+function draw(){
+ const w=canvas.clientWidth,h=canvas.clientHeight,cx=w/2,cy=h/2;
+ ctx.clearRect(0,0,w,h);ctx.fillStyle='#071426';ctx.fillRect(0,0,w,h);
+ const radius=Math.min(w,h)*.44, ppm=radius/maxRange;
+ ctx.lineWidth=1;ctx.strokeStyle='rgba(150,190,230,.18)';ctx.fillStyle='rgba(180,210,240,.55)';ctx.font='12px sans-serif';
+ for(let m=1;m<=maxRange;m++){const rr=m*ppm;if(rr>radius)break;ctx.beginPath();ctx.arc(cx,cy,rr,0,Math.PI*2);ctx.stroke();if(m===maxRange||m%2===0)ctx.fillText(m+' м',cx+4,cy-rr+14)}
+ ctx.beginPath();ctx.moveTo(cx-radius,cy);ctx.lineTo(cx+radius,cy);ctx.moveTo(cx,cy-radius);ctx.lineTo(cx,cy+radius);ctx.stroke();
+ ctx.strokeStyle='#ffca54';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx,cy-radius);ctx.stroke();
+ ctx.fillStyle='#2fe6a6';ctx.beginPath();ctx.arc(cx,cy,6,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#47b7ff';
+ for(const p of latest){
+   const d=Number(p.distance_m);if(!(d>0)||d>maxRange)continue;
+   const a=(Number(p.angle_deg)-90)*Math.PI/180;
+   const x=cx+Math.cos(a)*d*ppm,y=cy+Math.sin(a)*d*ppm;
+   const q=Math.max(0,Math.min(255,Number(p.quality)||0));ctx.globalAlpha=.35+.65*(q/255);
+   ctx.fillRect(x-1.5,y-1.5,3,3);
+ }
+ ctx.globalAlpha=1;
+}
+async function poll(){
+ try{
+  const [s,p]=await Promise.all([api('/api/v1/lidar/status'),api('/api/v1/lidar/points')]);
+  const t=s.telemetry,c=s.config; latest=p.points||[];lastSeq=p.scan_sequence||0;
+  $('endpoint').textContent=c.ip?(c.ip+':'+c.udp_port):'Не настроено';
+  $('connected').textContent=t.connected?'Есть':'Нет';$('scanning').textContent=t.scanning?'Идёт':'Нет';
+  $('seq').textContent=lastSeq;$('pointCount').textContent=latest.length;$('age').textContent=p.scan_age_ms>=0?Math.round(p.scan_age_ms)+' мс':'—';
+  $('state').textContent=t.connected&&t.scanning?'Данные идут':t.running?'Подключение…':'Отключен';
+  $('state').className='status '+(t.connected&&t.scanning?'running':t.error?'fault':'');
+  $('error').className=t.error?'dangerbox':'okbox';$('error').textContent=t.error||('Получено точек: '+latest.length);
+  draw();
+ }catch(e){$('error').className='dangerbox';$('error').textContent=e.message}
+}
+$('range').oninput=()=>{maxRange=Number($('range').value);$('scaleText').textContent=maxRange+' м';draw()};
+$('restart').onclick=async()=>{try{await api('/api/v1/lidar/stop','POST',{});await api('/api/v1/lidar/start','POST',{});toast('Сканирование перезапущено')}catch(e){alert(e.message)}};
+addEventListener('resize',resize);resize();poll();setInterval(poll,200);
+</script>
+</body>
+</html>
