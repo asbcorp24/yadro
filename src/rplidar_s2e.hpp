@@ -107,6 +107,7 @@ public:
     bool running() const;
 
     RplidarS2ETelemetry snapshot() const;
+    std::vector<RplidarPoint> point_snapshot() const;
 
     // Public for deterministic replay/tests and for future capture-file tools.
     void process_scan(const std::vector<RplidarPoint>& points);
@@ -147,6 +148,7 @@ private:
     mutable std::mutex mutex_;
     RplidarS2EConfig config_;
     RplidarS2ETelemetry telemetry_;
+    std::vector<RplidarPoint> latest_points_;
     FootTrack left_track_;
     FootTrack right_track_;
     std::atomic<bool> stop_requested_{false};
