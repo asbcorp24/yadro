@@ -6,29 +6,69 @@
 <title>REMOTION — RPLIDAR S2E</title>
 <link rel="stylesheet" href="style.css">
 <style>
-.lidar-layout{display:grid;grid-template-columns:270px minmax(0,1fr);gap:14px;align-items:stretch}
-.lidar-side{padding:16px!important}
-.lidar-side h2{font-size:1.15rem;margin:0}
-.compact-status{display:grid;gap:8px;margin-top:12px}
-.compact-row{display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025);font-size:.86rem}
-.compact-row strong{text-align:right}
-.scene-card{position:relative;min-height:610px;overflow:hidden;padding:0!important}
-.scene-head{position:absolute;z-index:4;left:18px;right:18px;top:16px;display:flex;justify-content:space-between;gap:12px;pointer-events:none}
-.scene-head .glass{padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:rgba(5,16,32,.78);backdrop-filter:blur(8px)}
-#lidar3d{display:block;width:100%;height:610px;background:#061322}
-.scene-legend{position:absolute;z-index:4;left:18px;bottom:16px;display:flex;gap:12px;flex-wrap:wrap;padding:8px 10px;border-radius:10px;background:rgba(5,16,32,.78);font-size:.78rem;color:var(--muted)}
-.legend-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
-.metrics-main{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:10px}
-.metric.hero .value{font-size:2rem}
+html,body{height:100%;overflow:hidden}
+.app{height:100vh;display:flex;flex-direction:column}
+.content{flex:1;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) 132px;gap:10px;padding-top:10px;padding-bottom:10px;overflow:hidden}
+.metrics-panel{padding:10px 12px!important}
+.metrics-panel .section-title{margin-bottom:7px}
+.metrics-panel .section-title h2{font-size:1rem;margin:0}
+.metrics-main{display:grid;grid-template-columns:repeat(12,minmax(76px,1fr));gap:7px}
+.metrics-main .metric{padding:8px 9px;min-height:66px}
+.metrics-main .metric .label{font-size:.72rem;line-height:1.08}
+.metrics-main .metric .value{font-size:1.32rem;line-height:1.05}
+.metrics-main .metric.hero .value{font-size:1.55rem}
+.metrics-main .unit{font-size:.72rem}
 .sym-card{position:relative;overflow:hidden}
-.sym-bar{height:6px;border-radius:999px;background:rgba(255,255,255,.08);margin-top:8px}
+.sym-bar{height:4px;border-radius:999px;background:rgba(255,255,255,.08);margin-top:5px}
 .sym-fill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#ff6b6b,#ffd166,#2ee6a6);transition:width .25s ease}
-.charts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px}
-.chart-card{padding:14px;border:1px solid var(--line);border-radius:16px;background:color-mix(in srgb,var(--panel) 92%,black 8%)}
-.chart-card h3{margin:0 0 8px;font-size:1rem}
-.chart-canvas{width:100%;height:190px;display:block}
-@media(max-width:1200px){.lidar-layout{grid-template-columns:220px minmax(0,1fr)}.metrics-main{grid-template-columns:repeat(3,1fr)}.charts{grid-template-columns:1fr}}
-@media(max-width:820px){.lidar-layout{grid-template-columns:1fr}.lidar-side{order:2}.scene-card{order:1}.metrics-main{grid-template-columns:repeat(2,1fr)}}
+
+.lidar-layout{display:grid;grid-template-columns:188px minmax(0,1fr);gap:10px;min-height:0}
+.lidar-side{padding:10px!important;overflow:hidden}
+.lidar-side h2{font-size:.98rem;margin:0}
+.lidar-side .section-title{margin-bottom:4px}
+.lidar-side .status{font-size:.68rem;padding:3px 6px}
+.compact-status{display:grid;gap:4px;margin-top:6px}
+.compact-row{display:flex;justify-content:space-between;gap:6px;padding:5px 6px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.025);font-size:.68rem;line-height:1.15}
+.compact-row strong{text-align:right;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lidar-side .toolbar{gap:5px!important;margin-top:7px!important}
+.lidar-side .btn{padding:6px 7px;font-size:.7rem}
+#sdkNotice{margin-top:7px!important;padding:6px!important;font-size:.66rem!important;line-height:1.15;max-height:48px;overflow:hidden}
+
+.scene-card{position:relative;min-height:0;height:100%;overflow:hidden;padding:0!important}
+.scene-head{position:absolute;z-index:4;left:12px;right:12px;top:10px;display:flex;justify-content:space-between;gap:8px;pointer-events:none}
+.scene-head .glass{padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:rgba(5,16,32,.78);backdrop-filter:blur(8px);font-size:.78rem}
+.scene-head .glass .muted{font-size:.68rem!important}
+#lidar3d{display:block;width:100%;height:100%;min-height:0;background:#061322}
+.scene-legend{position:absolute;z-index:4;left:12px;bottom:10px;display:flex;gap:9px;flex-wrap:wrap;padding:6px 8px;border-radius:9px;background:rgba(5,16,32,.78);font-size:.68rem;color:var(--muted)}
+.legend-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+
+.charts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;min-height:0}
+.chart-card{padding:8px 10px;border:1px solid var(--line);border-radius:13px;background:color-mix(in srgb,var(--panel) 92%,black 8%);min-height:0}
+.chart-card h3{margin:0 0 4px;font-size:.78rem}
+.chart-canvas{width:100%;height:96px;display:block}
+
+@media(max-height:800px) and (min-width:821px){
+ .content{grid-template-rows:auto minmax(0,1fr) 112px;gap:7px;padding-top:7px;padding-bottom:7px}
+ .metrics-main .metric{min-height:58px;padding:6px 7px}
+ .metrics-main .metric .value{font-size:1.18rem}
+ .metrics-main .metric.hero .value{font-size:1.35rem}
+ .chart-canvas{height:78px}
+}
+@media(max-width:1200px) and (min-width:821px){
+ .lidar-layout{grid-template-columns:170px minmax(0,1fr)}
+ .metrics-main{grid-template-columns:repeat(6,minmax(90px,1fr))}
+ .content{grid-template-rows:auto minmax(0,1fr) 122px}
+}
+@media(max-width:820px){
+ html,body{height:auto;overflow:auto}
+ .app{height:auto;display:block}
+ .content{display:block;overflow:visible}
+ .lidar-layout{grid-template-columns:1fr;margin-top:10px}
+ .lidar-side{order:2}.scene-card{order:1;height:520px}
+ .metrics-main{grid-template-columns:repeat(2,1fr)}
+ .charts{grid-template-columns:1fr;margin-top:10px}
+ .chart-canvas{height:170px}
+}
 </style>
 </head>
 <body>
@@ -36,9 +76,28 @@
 <header class="topbar"><a class="back" href="procedures.html">← Назад</a><div class="crumb">Процедуры · RPLIDAR S2E</div><div id="activePatientChip" class="patient-chip"></div></header>
 <main class="content">
 
+<section class="panel metrics-panel">
+<div class="section-title"><h2>Основные параметры шага</h2><span id="scanInfo" class="muted">Сканов: 0</span></div>
+<div class="metrics-main">
+<div class="metric hero"><div class="label">Текущий шаг L</div><div><span id="stepL" class="value">—</span><span class="unit">см</span></div></div>
+<div class="metric hero"><div class="label">Текущий шаг R</div><div><span id="stepR" class="value">—</span><span class="unit">см</span></div></div>
+<div class="metric"><div class="label">Предыдущий L</div><div><span id="prevL" class="value">—</span><span class="unit">см</span></div></div>
+<div class="metric"><div class="label">Предыдущий R</div><div><span id="prevR" class="value">—</span><span class="unit">см</span></div></div>
+<div class="metric"><div class="label">Цикл L</div><div><span id="cycleL" class="value">—</span><span class="unit">с</span></div></div>
+<div class="metric"><div class="label">Цикл R</div><div><span id="cycleR" class="value">—</span><span class="unit">с</span></div></div>
+
+<div class="metric sym-card hero"><div class="label">Продольная симметрия</div><div><span id="symLong" class="value">—</span><span class="unit">%</span></div><div class="sym-bar"><div id="symLongBar" class="sym-fill"></div></div></div>
+<div class="metric sym-card hero"><div class="label">Поперечная симметрия</div><div><span id="symTrans" class="value">—</span><span class="unit">%</span></div><div class="sym-bar"><div id="symTransBar" class="sym-fill"></div></div></div>
+<div class="metric"><div class="label">Разница шага L/R</div><div><span id="stepDiff" class="value">—</span><span class="unit">см</span></div></div>
+<div class="metric"><div class="label">Разница цикла L/R</div><div><span id="cycleDiff" class="value">—</span><span class="unit">с</span></div></div>
+<div class="metric"><div class="label">Левая стопа X / Y</div><div><span id="leftXY" class="value" style="font-size:1rem">—</span></div></div>
+<div class="metric"><div class="label">Правая стопа X / Y</div><div><span id="rightXY" class="value" style="font-size:1rem">—</span></div></div>
+</div>
+</section>
+
 <div class="lidar-layout">
 <section class="panel lidar-side">
-<div class="section-title"><h2>RPLIDAR S2E</h2><span id="connection" class="status">Ожидание</span></div>
+<div class="section-title"><h2>Лидар</h2><span id="connection" class="status">Ожидание</span></div>
 <div class="compact-status">
 <div class="compact-row"><span>IP / UDP</span><strong id="endpoint">—</strong></div>
 <div class="compact-row"><span>Ethernet</span><strong id="networkState">—</strong></div>
@@ -72,24 +131,7 @@
 </section>
 </div>
 
-<section class="panel" style="margin-top:14px">
-<div class="section-title"><h2>Параметры шага</h2><span id="scanInfo" class="muted">Сканов: 0</span></div>
-<div class="metrics-main">
-<div class="metric hero"><div class="label">Текущий шаг L</div><div><span id="stepL" class="value">—</span><span class="unit">см</span></div></div>
-<div class="metric hero"><div class="label">Текущий шаг R</div><div><span id="stepR" class="value">—</span><span class="unit">см</span></div></div>
-<div class="metric"><div class="label">Предыдущий L</div><div><span id="prevL" class="value">—</span><span class="unit">см</span></div></div>
-<div class="metric"><div class="label">Предыдущий R</div><div><span id="prevR" class="value">—</span><span class="unit">см</span></div></div>
-<div class="metric"><div class="label">Цикл L</div><div><span id="cycleL" class="value">—</span><span class="unit">с</span></div></div>
-<div class="metric"><div class="label">Цикл R</div><div><span id="cycleR" class="value">—</span><span class="unit">с</span></div></div>
 
-<div class="metric sym-card hero"><div class="label">Продольная симметрия</div><div><span id="symLong" class="value">—</span><span class="unit">%</span></div><div class="sym-bar"><div id="symLongBar" class="sym-fill"></div></div></div>
-<div class="metric sym-card hero"><div class="label">Поперечная симметрия</div><div><span id="symTrans" class="value">—</span><span class="unit">%</span></div><div class="sym-bar"><div id="symTransBar" class="sym-fill"></div></div></div>
-<div class="metric"><div class="label">Разница шага L/R</div><div><span id="stepDiff" class="value">—</span><span class="unit">см</span></div></div>
-<div class="metric"><div class="label">Разница цикла L/R</div><div><span id="cycleDiff" class="value">—</span><span class="unit">с</span></div></div>
-<div class="metric"><div class="label">Левая стопа X / Y</div><div><span id="leftXY" class="value" style="font-size:1rem">—</span></div></div>
-<div class="metric"><div class="label">Правая стопа X / Y</div><div><span id="rightXY" class="value" style="font-size:1rem">—</span></div></div>
-</div>
-</section>
 
 <section class="charts">
 <div class="chart-card"><h3>Длина шага L / R</h3><canvas id="stepChart" class="chart-canvas"></canvas></div>
