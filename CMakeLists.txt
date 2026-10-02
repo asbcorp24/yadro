@@ -154,6 +154,12 @@ if(YADRO_WITH_RPLIDAR_S2E)
     target_compile_definitions(rplidar_sdk PRIVATE _USE_MATH_DEFINES)
 
     if(WIN32)
+        # The upstream SDK's legacy HAL checks WIN32/WIN64 instead of MSVC's
+        # native _WIN32/_WIN64 macros in hal/types.h.
+        target_compile_definitions(rplidar_sdk PRIVATE WIN32)
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            target_compile_definitions(rplidar_sdk PRIVATE WIN64)
+        endif()
         target_link_libraries(rplidar_sdk PUBLIC ws2_32)
     endif()
 endif()
